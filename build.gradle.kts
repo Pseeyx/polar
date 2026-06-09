@@ -69,6 +69,12 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.javadoc {
+    (options as org.gradle.external.javadoc.StandardJavadocDocletOptions).apply {
+        addStringOption("Xdoclint:all,-missing", "-quiet")
+    }
+}
+
 nmcpAggregation {
     centralPortal {
         username = System.getenv("SONATYPE_USERNAME")

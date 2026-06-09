@@ -418,50 +418,46 @@ public class PolarLoader implements ChunkLoader {
       for (int i = 0; i < sections.length; i++) {
         int sectionY = i + chunk.getMinSection();
         var section = chunk.getSection(sectionY);
-        // todo check if section is empty and skip
+        if (isUnmodifiedSection(section)) {
+          sections[i] = new PolarSection();
+          continue;
+        }
 
         var blockPalette = new ArrayList<String>();
-        int[] blockData = null;
-        if (section.blockPalette().count() == 0) {
-          // Short circuit empty palette
-          blockPalette.add("air");
-        } else {
-          var localBlockData = new int[PolarSection.BLOCK_PALETTE_SIZE];
+        var localBlockData = new int[PolarSection.BLOCK_PALETTE_SIZE];
 
-          section
-              .blockPalette()
-              .getAll(
-                  (x, sectionLocalY, z, blockStateId) -> {
-                    final int blockIndex = x + sectionLocalY * 16 * 16 + z * 16;
+        section
+            .blockPalette()
+            .getAll(
+                (x, sectionLocalY, z, blockStateId) -> {
+                  final int blockIndex = x + sectionLocalY * 16 * 16 + z * 16;
 
-                    // Section palette
-                    var namespace =
-                        blockCache.computeIfAbsent(
-                            (short) blockStateId,
-                            unused -> blockToString(Block.fromStateId(blockStateId)));
-                    int paletteId = blockPalette.indexOf(namespace);
-                    if (paletteId == -1) {
-                      paletteId = blockPalette.size();
-                      blockPalette.add(namespace);
-                    }
-                    localBlockData[blockIndex] = paletteId;
-                  });
+                  // Section palette
+                  var namespace =
+                      blockCache.computeIfAbsent(
+                          (short) blockStateId,
+                          unused -> blockToString(Block.fromStateId(blockStateId)));
+                  int paletteId = blockPalette.indexOf(namespace);
+                  if (paletteId == -1) {
+                    paletteId = blockPalette.size();
+                    blockPalette.add(namespace);
+                  }
+                  localBlockData[blockIndex] = paletteId;
+                });
 
-          blockData = localBlockData;
+        int[] blockData = localBlockData;
 
-          // Block entities
-          for (int sectionLocalY = 0; sectionLocalY < CHUNK_SECTION_SIZE; sectionLocalY++) {
-            for (int z = 0; z < Chunk.CHUNK_SIZE_Z; z++) {
-              for (int x = 0; x < Chunk.CHUNK_SIZE_X; x++) {
-                int y = sectionLocalY + sectionY * CHUNK_SECTION_SIZE;
-                var block = chunk.getBlock(x, y, z, Block.Getter.Condition.CACHED);
-                if (block == null) continue;
+        // Block entities
+        for (int sectionLocalY = 0; sectionLocalY < CHUNK_SECTION_SIZE; sectionLocalY++) {
+          for (int z = 0; z < Chunk.CHUNK_SIZE_Z; z++) {
+            for (int x = 0; x < Chunk.CHUNK_SIZE_X; x++) {
+              int y = sectionLocalY + sectionY * CHUNK_SECTION_SIZE;
+              var block = chunk.getBlock(x, y, z, Block.Getter.Condition.CACHED);
+              if (block == null) continue;
 
-                var handlerId =
-                    block.handler() == null ? null : block.handler().getKey().asString();
-                if (handlerId != null || block.hasNbt()) {
-                  blockEntities.add(new PolarChunk.BlockEntity(x, y, z, handlerId, block.nbt()));
-                }
+              var handlerId = block.handler() == null ? null : block.handler().getKey().asString();
+              if (handlerId != null || block.hasNbt()) {
+                blockEntities.add(new PolarChunk.BlockEntity(x, y, z, handlerId, block.nbt()));
               }
             }
           }
@@ -510,6 +506,13 @@ public class PolarLoader implements ChunkLoader {
         new PolarChunk(
             chunk.getChunkX(), chunk.getChunkZ(), sections, blockEntities, heightmaps, userData));
     worldDataLock.writeLock().unlock();
+  }
+
+  private boolean isUnmodifiedSection(@NotNull Section section) {
+    if (section.blockPalette().count() != 0) return false;
+    if (section.biomePalette().count() != 0) return false;
+    return getLightContent(section.blockLight().array()) == LightContent.MISSING
+        && getLightContent(section.skyLight().array()) == LightContent.MISSING;
   }
 
   private @NotNull LightContent getLightContent(byte @Nullable [] data) {
