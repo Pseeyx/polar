@@ -1,7 +1,6 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.io;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
 
 import static org.junit.jupiter.api.Assertions.*;
 

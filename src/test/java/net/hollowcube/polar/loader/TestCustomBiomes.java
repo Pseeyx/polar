@@ -1,5 +1,7 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.loader;
 
+import net.hollowcube.polar.io.PolarWriter;
+import net.hollowcube.polar.model.PolarWorld;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.instance.InstanceContainer;
 import net.minestom.server.world.DimensionType;

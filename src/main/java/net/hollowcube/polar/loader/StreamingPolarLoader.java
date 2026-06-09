@@ -1,10 +1,13 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.loader;
 
 import com.github.luben.zstd.Zstd;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
-import net.minestom.server.MinecraftServer;
+import net.hollowcube.polar.conversion.PolarDataConverter;
+import net.hollowcube.polar.io.PaletteUtil;
+import net.hollowcube.polar.model.PolarSection;
+import net.hollowcube.polar.model.PolarWorld;
 import net.minestom.server.command.builder.arguments.minecraft.ArgumentBlockState;
 import net.minestom.server.command.builder.exception.ArgumentSyntaxException;
 import net.minestom.server.coordinate.CoordConversion;
@@ -17,17 +20,19 @@ import net.minestom.server.world.biome.Biome;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.EOFException;
 import java.io.IOException;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Objects;
 
-import static net.hollowcube.polar.PolarLoader.*;
-import static net.hollowcube.polar.PolarReader.*;
-import static net.hollowcube.polar.UnsafeOps.*;
+import static net.hollowcube.polar.io.PolarReader.*;
+import static net.hollowcube.polar.loader.PolarLoader.*;
+import static net.hollowcube.polar.loader.UnsafeOps.*;
 import static net.minestom.server.instance.Chunk.CHUNK_SECTION_SIZE;
 import static net.minestom.server.network.NetworkBuffer.*;
-import static net.minestom.server.network.PolarBufferAccessWidener.networkBufferAddress;
-import static net.minestom.server.network.PolarBufferAccessWidener.networkBufferView;
 
 final class StreamingPolarLoader {
     private final InstanceContainer instance;
@@ -58,8 +63,65 @@ final class StreamingPolarLoader {
     }
 
     public void loadAllSequential(@NotNull ReadableByteChannel channel, long fileSize) throws IOException {
-        final var buffer = readHeader(channel, fileSize);
+        try (Arena dstArena = Arena.ofConfined()) {
+            final MemorySegment dst;
+            try (Arena srcArena = Arena.ofConfined()) {
+                final MemorySegment src;
+                if (channel instanceof FileChannel fileChannel) {
+                    src = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0L, fileSize, srcArena);
+                } else {
+                    final MemorySegment segment = srcArena.allocate(fileSize);
+                    long offset = 0L; // readFully, but for large files
+                    while (offset < fileSize) {
+                        long n = channel.read(segment.asSlice(offset, fileSize - offset).asByteBuffer());
+                        if (n < 0) {
+                            throw new EOFException("Unexpected EOF: expected " + fileSize + " bytes, got " + offset);
+                        }
+                        offset += n;
+                    }
+                    src = segment.asReadOnly();
+                }
+                var buffer = NetworkBuffer.wrap(src, 0, fileSize);
+                var magicNumber = buffer.read(INT);
+                assertThat(magicNumber == PolarWorld.MAGIC_NUMBER, "Invalid magic number");
+                this.version = buffer.read(SHORT);
+                validateVersion(this.version);
+                this.dataVersion = version >= PolarWorld.VERSION_DATA_CONVERTER
+                        ? buffer.read(VAR_INT)
+                        : dataConverter.defaultDataVersion();
+                var compressionType = PolarWorld.CompressionType.fromId(buffer.read(BYTE));
+                assertThat(compressionType != null, "Invalid compression type");
+                int dataLength = buffer.read(VAR_INT);
 
+                switch (compressionType) {
+                    case NONE -> {
+                        readData(src.asSlice(buffer.readIndex()));
+                        return;
+                    }
+                    // src should be unreachable following the dst copy.
+                    case ZSTD -> {
+                        var decompression = dstArena.allocate(dataLength);
+                        long count = Zstd.decompressUnsafe(decompression.address(), decompression.byteSize(), src.address(), src.byteSize());
+                        if (Zstd.isError(count)) {
+                            throw new RuntimeException("decompression failed: " + Zstd.getErrorName(count));
+                        }
+                        dst = decompression.asReadOnly();
+                    }
+                    default -> throw new UnsupportedOperationException("Unsupported compression type: " + compressionType);
+                }
+            } // src is deallocated
+            // Now we can just read the dst buffer without having to worry about the extra footprint of src
+            readData(dst);
+        }
+    }
+
+    /**
+     * Loads all chunks in the instance and user data.
+     *
+     * @param segment the network buffer containing the decompressed data
+     */
+    private void readData(@NotNull MemorySegment segment) {
+        var buffer = NetworkBuffer.wrap(segment, 0, segment.byteSize());
         byte minSection = buffer.read(BYTE), maxSection = buffer.read(BYTE);
         assertThat(minSection < maxSection, "Invalid section range");
 
@@ -67,7 +129,7 @@ final class StreamingPolarLoader {
         if (version > PolarWorld.VERSION_WORLD_USERDATA) {
             int userDataLength = buffer.read(VAR_INT);
             if (worldAccess != null) {
-                var worldDataView = networkBufferView(buffer, buffer.readIndex(), userDataLength);
+                var worldDataView = NetworkBuffer.wrap(segment.asSlice(buffer.readIndex(), userDataLength), 0L, userDataLength);
                 worldAccess.loadWorldData(instance, worldDataView);
             }
             buffer.advanceRead(userDataLength);
@@ -76,56 +138,13 @@ final class StreamingPolarLoader {
         // Chunk data
         int chunkCount = buffer.read(VAR_INT);
         for (int i = 0; i < chunkCount; i++) {
-            readChunk(buffer, minSection, maxSection);
+            readChunk(segment, buffer, minSection, maxSection);
         }
 
         Check.stateCondition(buffer.readableBytes() > 0, "Unexpected extra data at end of buffer");
     }
 
-    /**
-     * Reads the header and returns a network buffer containing the decompressed content.
-     *
-     * <p>Always populates {@link #version} and {@link #dataVersion}.</p>
-     */
-    private NetworkBuffer readHeader(@NotNull ReadableByteChannel channel, long fileSize) throws IOException {
-        final var buffer = NetworkBuffer.staticBuffer(fileSize, MinecraftServer.process());
-        buffer.readChannel(channel);
-
-        var magicNumber = buffer.read(INT);
-        assertThat(magicNumber == PolarWorld.MAGIC_NUMBER, "Invalid magic number");
-
-        this.version = buffer.read(SHORT);
-        validateVersion(this.version);
-        this.dataVersion = version >= PolarWorld.VERSION_DATA_CONVERTER
-                ? buffer.read(VAR_INT)
-                : dataConverter.defaultDataVersion();
-
-        var compression = PolarWorld.CompressionType.fromId(buffer.read(BYTE));
-        assertThat(compression != null, "Invalid compression type");
-        var compressedDataLength = buffer.read(VAR_INT);
-
-        return switch (compression) {
-            case NONE -> buffer;
-            case ZSTD -> {
-                // This is using some internals of Minestom, so worth an explanation. As of 1.21.3, network buffer is
-                // backed by a directly allocated array via Unsafe. Zstd supports direct decompression, so we can use
-                // the direct addresses of the two buffers for decompression.
-                final var dst = NetworkBuffer.staticBuffer(compressedDataLength, MinecraftServer.process());
-                final var srcAddress = networkBufferAddress(buffer) + buffer.readIndex();
-                final var dstAddress = networkBufferAddress(dst);
-                long count = Zstd.decompressUnsafe(dstAddress, compressedDataLength, srcAddress,
-                                                   buffer.readableBytes());
-                if (Zstd.isError(count)) {
-                    throw new RuntimeException("decompression failed: " + Zstd.getErrorName(count));
-                }
-                dst.writeIndex(compressedDataLength);
-                yield dst;
-                // The original buffer is useless and may be collected at this point.
-            }
-        };
-    }
-
-    private void readChunk(@NotNull NetworkBuffer buffer, int minSection, int maxSection) {
+    private void readChunk(@NotNull MemorySegment segment, @NotNull NetworkBuffer buffer, int minSection, int maxSection) {
         final var chunkX = buffer.read(VAR_INT);
         final var chunkZ = buffer.read(VAR_INT);
         final var chunk = instance.getChunkSupplier().createChunk(instance, chunkX, chunkZ);
@@ -168,7 +187,7 @@ final class StreamingPolarLoader {
         if (version > PolarWorld.VERSION_USERDATA_OPT_BLOCK_ENT_NBT) {
             int userDataLength = buffer.read(VAR_INT);
             if (worldAccess != null) {
-                var chunkDataView = networkBufferView(buffer, buffer.readIndex(), userDataLength);
+                var chunkDataView = NetworkBuffer.wrap(segment.asSlice(buffer.readIndex(), userDataLength), 0L, userDataLength);
                 worldAccess.loadChunkData(chunk, chunkDataView);
             }
             buffer.advanceRead(userDataLength);
@@ -307,7 +326,7 @@ final class StreamingPolarLoader {
         for (int i = 0; i < rawBiomePalette.length; i++) {
             biomePalette[i] = biomeToIdCache.computeIfAbsent(rawBiomePalette[i], (String name) -> {
                 PolarWorldAccess searchWorldAccess = Objects.requireNonNullElse(this.worldAccess,
-                                                                                PolarWorldAccess.DEFAULT);
+                        PolarWorldAccess.DEFAULT);
                 var biomeId = searchWorldAccess.getBiomeId(name);
                 if (biomeId == -1) {
                     logger.error("Failed to find biome: {}", name);

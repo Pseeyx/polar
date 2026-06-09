@@ -1,5 +1,8 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.io;
 
+import net.hollowcube.polar.model.PolarChunk;
+import net.hollowcube.polar.model.PolarSection;
+import net.hollowcube.polar.model.PolarWorld;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;

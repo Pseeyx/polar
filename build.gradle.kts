@@ -26,13 +26,14 @@ repositories {
 
 dependencies {
     compileOnly(libs.minestom)
+    compileOnly("org.slf4j:slf4j-api:2.0.17")
     implementation(libs.zstd)
     // Fastutil is only included because minestom already uses it,
     // otherwise it is a crazy dependency for how it is used in this project.
     implementation(libs.fastutil)
 
-    testImplementation("ch.qos.logback:logback-core:1.4.7")
-    testImplementation("ch.qos.logback:logback-classic:1.4.7")
+    testImplementation("ch.qos.logback:logback-core:1.5.25")
+    testImplementation("ch.qos.logback:logback-classic:1.5.25")
 
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")

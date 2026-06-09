@@ -1,4 +1,4 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.loader;
 
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.instance.Chunk;

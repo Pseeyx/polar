@@ -1,8 +1,14 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.loader;
 
 import it.unimi.dsi.fastutil.shorts.Short2ObjectMap;
 import it.unimi.dsi.fastutil.shorts.Short2ObjectOpenHashMap;
-import net.hollowcube.polar.PolarSection.LightContent;
+import net.hollowcube.polar.conversion.PolarDataConverter;
+import net.hollowcube.polar.io.PolarReader;
+import net.hollowcube.polar.io.PolarWriter;
+import net.hollowcube.polar.model.PolarChunk;
+import net.hollowcube.polar.model.PolarSection;
+import net.hollowcube.polar.model.PolarSection.LightContent;
+import net.hollowcube.polar.model.PolarWorld;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.command.builder.arguments.minecraft.ArgumentBlockState;
 import net.minestom.server.command.builder.exception.ArgumentSyntaxException;
@@ -36,7 +42,7 @@ import static net.minestom.server.instance.Chunk.CHUNK_SECTION_SIZE;
 
 @SuppressWarnings("UnstableApiUsage")
 public class PolarLoader implements ChunkLoader {
-    static final Logger logger = LoggerFactory.getLogger(PolarLoader.class);
+    @ApiStatus.Internal public static final Logger logger = LoggerFactory.getLogger(PolarLoader.class);
     private static final BlockManager BLOCK_MANAGER = MinecraftServer.getBlockManager();
     private static final ExceptionManager EXCEPTION_HANDLER = MinecraftServer.getExceptionManager();
 
@@ -276,7 +282,8 @@ public class PolarLoader implements ChunkLoader {
             UnsafeOps.unsafeUpdateSkyLightArray(section.skyLight(), getLightArray(sectionData.skyLightContent(), sectionData.skyLight()));
     }
 
-    static byte[] getLightArray(@NotNull LightContent content, byte @Nullable [] data) {
+    @ApiStatus.Internal
+    public static byte[] getLightArray(@NotNull LightContent content, byte @Nullable [] data) {
         return switch (content) {
             case MISSING -> null;
             case EMPTY -> LightCompute.EMPTY_CONTENT;
@@ -285,7 +292,8 @@ public class PolarLoader implements ChunkLoader {
         };
     }
 
-    static @NotNull Block createBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
+    @ApiStatus.Internal
+    public static @NotNull Block createBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
         // Fetch the block type, we can ignore Handler/NBT since we are about to replace it
         var block = chunk.getBlock(blockEntity.x(), blockEntity.y(), blockEntity.z(), Block.Getter.Condition.TYPE);
         if (blockEntity.id() != null)
@@ -295,7 +303,8 @@ public class PolarLoader implements ChunkLoader {
         return block;
     }
 
-    static void loadBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
+    @ApiStatus.Internal
+    public static void loadBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
         var block = createBlockEntity(chunk, blockEntity);
         chunk.setBlock(blockEntity.x(), blockEntity.y(), blockEntity.z(), block);
     }

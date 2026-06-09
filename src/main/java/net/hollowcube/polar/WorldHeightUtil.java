@@ -1,5 +1,8 @@
 package net.hollowcube.polar;
 
+import net.hollowcube.polar.model.PolarChunk;
+import net.hollowcube.polar.model.PolarSection;
+import net.hollowcube.polar.model.PolarWorld;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;

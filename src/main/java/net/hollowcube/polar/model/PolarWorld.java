@@ -1,10 +1,12 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.model;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import net.hollowcube.polar.WorldHeightUtil;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.coordinate.CoordConversion;
 import net.minestom.server.world.DimensionType;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,13 +23,13 @@ public class PolarWorld {
     public static final int MAGIC_NUMBER = 0x506F6C72; // `Polr`
     public static final short LATEST_VERSION = 7;
 
-    static final short VERSION_UNIFIED_LIGHT = 1;
-    static final short VERSION_USERDATA_OPT_BLOCK_ENT_NBT = 2;
-    static final short VERSION_MINESTOM_NBT_READ_BREAK = 3;
-    static final short VERSION_WORLD_USERDATA = 4;
-    static final short VERSION_SHORT_GRASS = 5; // >:(
-    static final short VERSION_DATA_CONVERTER = 6;
-    static final short VERSION_IMPROVED_LIGHT = 7;
+    @ApiStatus.Internal public static final short VERSION_UNIFIED_LIGHT = 1;
+    @ApiStatus.Internal public static final short VERSION_USERDATA_OPT_BLOCK_ENT_NBT = 2;
+    @ApiStatus.Internal public static final short VERSION_MINESTOM_NBT_READ_BREAK = 3;
+    @ApiStatus.Internal public static final short VERSION_WORLD_USERDATA = 4;
+    @ApiStatus.Internal public static final short VERSION_SHORT_GRASS = 5; // >:(
+    @ApiStatus.Internal public static final short VERSION_DATA_CONVERTER = 6;
+    @ApiStatus.Internal public static final short VERSION_IMPROVED_LIGHT = 7;
 
     public static CompressionType DEFAULT_COMPRESSION = CompressionType.ZSTD;
 

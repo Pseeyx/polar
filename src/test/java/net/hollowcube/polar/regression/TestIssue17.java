@@ -1,7 +1,7 @@
 package net.hollowcube.polar.regression;
 
-import net.hollowcube.polar.PolarLoader;
-import net.hollowcube.polar.PolarWorld;
+import net.hollowcube.polar.loader.PolarLoader;
+import net.hollowcube.polar.model.PolarWorld;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.instance.InstanceContainer;
 import net.minestom.server.instance.block.Block;

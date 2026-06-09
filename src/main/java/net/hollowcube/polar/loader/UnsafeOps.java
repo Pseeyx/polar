@@ -1,4 +1,4 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.loader;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minestom.server.instance.Chunk;

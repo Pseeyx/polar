@@ -1,6 +1,10 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.io;
 
 import com.github.luben.zstd.Zstd;
+import net.hollowcube.polar.conversion.PolarDataConverter;
+import net.hollowcube.polar.model.PolarChunk;
+import net.hollowcube.polar.model.PolarSection;
+import net.hollowcube.polar.model.PolarWorld;
 import net.minestom.server.coordinate.CoordConversion;
 import net.minestom.server.instance.Chunk;
 import net.minestom.server.network.NetworkBuffer;

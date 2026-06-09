@@ -1,13 +1,18 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.io;
 
 import com.github.luben.zstd.Zstd;
-import net.hollowcube.polar.PolarSection.LightContent;
+import net.hollowcube.polar.conversion.PolarDataConverter;
+import net.hollowcube.polar.model.PolarChunk;
+import net.hollowcube.polar.model.PolarSection;
+import net.hollowcube.polar.model.PolarSection.LightContent;
+import net.hollowcube.polar.model.PolarWorld;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.minestom.server.coordinate.CoordConversion;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.utils.nbt.BinaryTagReader;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
@@ -18,7 +23,7 @@ import java.util.ArrayList;
 import static net.minestom.server.network.NetworkBuffer.*;
 
 public class PolarReader {
-    static final NetworkBuffer.Type<byte[]> LIGHT_DATA = NetworkBuffer.FixedRawBytes(2048);
+    @ApiStatus.Internal public static final NetworkBuffer.Type<byte[]> LIGHT_DATA = NetworkBuffer.FixedRawBytes(2048);
 
     private static final boolean FORCE_LEGACY_NBT = Boolean.getBoolean("polar.debug.force-legacy-nbt");
     static final int MAX_BLOCK_PALETTE_SIZE = 16 * 16 * 16;
@@ -156,7 +161,8 @@ public class PolarReader {
         );
     }
 
-    static void upgradeGrassInPalette(String[] blockPalette, int version) {
+    @ApiStatus.Internal
+    public static void upgradeGrassInPalette(String[] blockPalette, int version) {
         if (version <= PolarWorld.VERSION_SHORT_GRASS) {
             for (int i = 0; i < blockPalette.length; i++) {
                 if (blockPalette[i].contains("grass")) {
@@ -169,7 +175,8 @@ public class PolarReader {
         }
     }
 
-    static int[][] readHeightmapData(@NotNull NetworkBuffer buffer, boolean skip) {
+    @ApiStatus.Internal
+    public static int[][] readHeightmapData(@NotNull NetworkBuffer buffer, boolean skip) {
         var heightmaps = !skip ? new int[PolarChunk.MAX_HEIGHTMAPS][] : null;
         int heightmapMask = buffer.read(INT);
         for (int i = 0; i < PolarChunk.MAX_HEIGHTMAPS; i++) {
@@ -192,7 +199,8 @@ public class PolarReader {
         return heightmaps;
     }
 
-    static @NotNull PolarChunk.BlockEntity readBlockEntity(@NotNull PolarDataConverter dataConverter, int version, int dataVersion, @NotNull NetworkBuffer buffer) {
+    @ApiStatus.Internal
+    public static @NotNull PolarChunk.BlockEntity readBlockEntity(@NotNull PolarDataConverter dataConverter, int version, int dataVersion, @NotNull NetworkBuffer buffer) {
         int posIndex = buffer.read(INT);
         var id = buffer.read(STRING.optional());
 
@@ -221,7 +229,8 @@ public class PolarReader {
         );
     }
 
-    static void validateVersion(int version) {
+    @ApiStatus.Internal
+    public static void validateVersion(int version) {
         var invalidVersionError = String.format("Unsupported Polar version. Up to %d is supported, found %d.",
                 PolarWorld.LATEST_VERSION, version);
         assertThat(version <= PolarWorld.LATEST_VERSION, invalidVersionError);
@@ -263,7 +272,8 @@ public class PolarReader {
     }
 
     @Contract("false, _ -> fail")
-    static void assertThat(boolean condition, @NotNull String message) {
+    @ApiStatus.Internal
+    public static void assertThat(boolean condition, @NotNull String message) {
         if (!condition) throw new Error(message);
     }
 

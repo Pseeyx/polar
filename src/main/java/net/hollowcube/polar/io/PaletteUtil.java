@@ -1,8 +1,10 @@
-package net.hollowcube.polar;
+package net.hollowcube.polar.io;
 
 import net.minestom.server.utils.validate.Check;
+import org.jetbrains.annotations.ApiStatus;
 
-final class PaletteUtil {
+@ApiStatus.Internal
+public final class PaletteUtil {
     private PaletteUtil() {}
 
     public static int bitsToRepresent(int n) {

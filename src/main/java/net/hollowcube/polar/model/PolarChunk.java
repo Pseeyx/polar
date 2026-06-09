@@ -1,8 +1,8 @@
-package net.hollowcube.polar;
-
+package net.hollowcube.polar.model;
 
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.minestom.server.instance.Chunk;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -35,8 +35,8 @@ public record PolarChunk(
             HEIGHTMAP_WORLD_SURFACE,
             HEIGHTMAP_WORLD_SURFACE_WG,
     };
-    static final int HEIGHTMAP_SIZE = Chunk.CHUNK_SIZE_X * Chunk.CHUNK_SIZE_Z;
-    static final int MAX_HEIGHTMAPS = 32;
+    @ApiStatus.Internal public static final int HEIGHTMAP_SIZE = Chunk.CHUNK_SIZE_X * Chunk.CHUNK_SIZE_Z;
+    @ApiStatus.Internal public static final int MAX_HEIGHTMAPS = 32;
 
     public int @Nullable [] heightmap(int type) {
         return heightmaps[type];
