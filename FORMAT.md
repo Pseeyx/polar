@@ -13,6 +13,7 @@ Polar exposes the on-disk layout through builder-based Java types. These mirror 
 | `PolarSection` | `PolarSection.builder()` / `PolarSection.filled()` | Internal API; defaults to an empty section |
 | `PolarChunk.BlockEntity` | `PolarChunk.BlockEntity.builder()` | Nested builder for block entity records |
 | `PolarLoader` | `PolarLoader.builder()` / `PolarLoader.forWorld(world)` | Implements Minestom `ChunkLoader` |
+| `PolarByteStorage` | `PolarByteStorage.FileStorage` | Pluggable persistence for serialized world bytes |
 
 Example assembling a minimal world in memory:
 
@@ -28,13 +29,14 @@ PolarWorld roundTrip = PolarReader.read(file);
 
 ### Header
 
-| Name           | Type   | Notes                                                                   |
-|----------------|--------|-------------------------------------------------------------------------|
-| Magic Number   | int    | `Polr`                                                                  |
-| Version        | short  |                                                                         |
-| Compression    | byte   | 0 = None, 1 = Zstd                                                      |
-| Length of data | varint | Uncompressed length of data (or just length of data if `Compression=0`) |
-| World          | world  |                                                                         |
+| Name           | Type   | Notes                                                                                      |
+|----------------|--------|--------------------------------------------------------------------------------------------|
+| Magic Number   | int    | `Polr`                                                                                     |
+| Version        | short  | Current latest is 8                                                                        |
+| Data version   | varint | Present when `Version >= 6`. Minecraft data version of the world contents                    |
+| Compression    | byte   | 0 = None, 1 = Zstd                                                                         |
+| Length of data | varint | Uncompressed length of data (or just length of data if `Compression=0`)                    |
+| World          | world  | Compressed or raw depending on `Compression`                                               |
 
 ### World
 
@@ -42,7 +44,7 @@ PolarWorld roundTrip = PolarReader.read(file);
 |------------------|--------------|------------------------------------------|
 | Min Section      | byte         | For example, -4 in a vanilla world       |
 | Max Section      | byte         | For example, 19 in a vanilla world       |
-| User data        | array[byte]  | Arbitrary user data segment              |
+| User data        | array[byte]  | Present when `Version > 4`. Varint length prefix followed by bytes |
 | Number of Chunks | varint       | Number of entries in the following array |
 | Chunks           | array[chunk] | Chunk data                               |
 
@@ -54,15 +56,14 @@ Entities or some other extra data field needs to be added to chunks in the futur
 
 | Name                     | Type                | Notes                                                                                |
 |--------------------------|---------------------|--------------------------------------------------------------------------------------|
-| Chunk X                  | varint              |                                                                                      |
-| Chunk Z                  | varint              |                                                                                      |
+| Chunk X                  | varint              | Zig-zag encoded varint when `Version >= 8`, otherwise signed varint                  |
+| Chunk Z                  | varint              | Zig-zag encoded varint when `Version >= 8`, otherwise signed varint                  |
 | Sections                 | array[section]      | `maxSection-minSection+1` entries                                                    |
 | Number of Block Entities | varint              | Number of entries in the following array                                             |
 | Block Entities           | array[block entity] |                                                                                      |
 | Heightmap Mask           | int                 | A mask indicating which heightmaps are present. See `PolarChunk` for flag constants. |
-| Heightmaps               | array[bytes]        | One heightmap for each bit present in Heightmap Mask                                 |
-| Length of user data      | varint              | Number of entries in the following array                                             |
-| User data                | array[byte]         | Arbitrary user data segment                                                          |
+| Heightmaps               | array[long]         | One packed long array for each bit present in Heightmap Mask                         |
+| User data                | array[byte]         | Present when `Version > 2`. Varint length prefix followed by bytes                 |
 
 Corresponds to `PolarChunk` record components. Build with `PolarChunk.builder()` or `PolarChunk.at(x, z, sectionCount)`.
 
@@ -71,29 +72,23 @@ Corresponds to `PolarChunk` record components. Build with `PolarChunk.builder()`
 | Name                      | Type          | Notes                                                             |
 |---------------------------|---------------|-------------------------------------------------------------------|
 | Is Empty                  | bool          | If set, nothing follows                                           |
-| Block Palette Size        | varint        |                                                                   |
-| Block Palette             | array[string] | Entries are in the form `minecraft:block[key1=value1,key2=value2] |
-| Block Palette Data Length | varint        | Only present if `Block Palette Size > 1`                          |
-| Block Palette Data        | array[long]   | See the anvil format for more information about this type         |
-| Biome Palette Size        | varint        |                                                                   |
-| Biome Palette             | array[string] |                                                                   |
-| Biome Palette Data Length | varint        | Only present if `Biome Palette Size > 1`                          |
-| Biome Palette Data        | array[long]   | See the anvil format for more information about this type         |
-| Block Light Data Content  | byte          | 0 = no lighting, 1 = all zero, 2 = all max, 3 = present after     |
-| Block Light               | bytes         | A 2048 byte long nibble array, only present if above = 3          |
-| Sky Light Data Content    | byte          | 0 = no lighting, 1 = all zero, 2 = all max, 3 = present after     |
-| Sky Light                 | bytes         | A 2048 byte long nibble array, only present if above = 3          |
+| Block Palette             | array[string] | Varint length prefix. Entries are block state strings             |
+| Block Palette Data        | array[long]   | Only present if palette size > 1. Packed palette indices          |
+| Biome Palette             | array[string] | Varint length prefix                                              |
+| Biome Palette Data        | array[long]   | Only present if palette size > 1                                  |
+| Block Light Data Content  | byte          | Present when `Version > 1`. 0 = missing, 1 = empty, 2 = full, 3 = present |
+| Block Light               | bytes         | 2048-byte nibble array, only present when content = 3             |
+| Sky Light Data Content    | byte          | Present when `Version > 1`                                        |
+| Sky Light                 | bytes         | 2048-byte nibble array, only present when content = 3             |
 
 Build non-empty sections with `PolarSection.filled()` and empty sections with `PolarSection.empty()`.
 
 ### Block Entity
 
-| Name            | Type   | Notes                                |
-|-----------------|--------|--------------------------------------|
-| Chunk Pos       | int    |                                      |
-| Has ID          | bool   | If unset, Block Entity ID is omitted |
-| Block Entity ID | string |                                      |
-| Has NBT Data    | bool   | If unset, NBT Data is omitted        |
-| NBT Data        | nbt    |                                      |
+| Name            | Type   | Notes                                                                 |
+|-----------------|--------|-----------------------------------------------------------------------|
+| Chunk Pos       | int    | Packed chunk block index                                              |
+| Block Entity ID | string | Optional when `Version > 2`                                         |
+| NBT Data        | nbt    | Optional when `Version > 2`                                           |
 
 Build with `PolarChunk.BlockEntity.builder()`.

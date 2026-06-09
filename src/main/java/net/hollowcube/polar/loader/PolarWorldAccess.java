@@ -10,84 +10,80 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Provides access to user world data for a {@link PolarLoader} to get and set user
- * specific world data such as objects, as well as provides some relevant callbacks.
- * <br/><br/>
- * Usage if world access is completely optional, dependent features will not add
- * overhead to the format if unused.
+ * Provides access to user world data for a {@link PolarLoader} to get and set user specific world
+ * data such as objects, as well as provides some relevant callbacks. <br>
+ * <br>
+ * Usage if world access is completely optional, dependent features will not add overhead to the
+ * format if unused.
  */
 public interface PolarWorldAccess {
-    PolarWorldAccess DEFAULT = new DefaultPolarWorldAccess();
+  PolarWorldAccess DEFAULT = new DefaultPolarWorldAccess();
 
-    /**
-     * Called when an instance is created from this chunk loader.
-     * <br/><br/>
-     * Can be used to initialize the world based on saved user data in the world.
-     *
-     * @param instance The Minestom instance being created
-     * @param userData The saved user data, or null if none is present.
-     */
-    default void loadWorldData(@NotNull Instance instance, @Nullable NetworkBuffer userData) {
-    }
+  /**
+   * Called when an instance is created from this chunk loader. <br>
+   * <br>
+   * Can be used to initialize the world based on saved user data in the world.
+   *
+   * @param instance The Minestom instance being created
+   * @param userData The saved user data, or null if none is present.
+   */
+  default void loadWorldData(@NotNull Instance instance, @Nullable NetworkBuffer userData) {}
 
-    /**
-     * Called when an instance is being saved.
-     * <br/><br/>
-     * Can be used to save user data in the world by writing it to the buffer.
-     *
-     * @param instance The Minestom instance being saved
-     * @param userData A buffer to write user data to save
-     */
-    default void saveWorldData(@NotNull Instance instance, @NotNull NetworkBuffer userData) {
-    }
+  /**
+   * Called when an instance is being saved. <br>
+   * <br>
+   * Can be used to save user data in the world by writing it to the buffer.
+   *
+   * @param instance The Minestom instance being saved
+   * @param userData A buffer to write user data to save
+   */
+  default void saveWorldData(@NotNull Instance instance, @NotNull NetworkBuffer userData) {}
 
-    /**
-     * Called when a chunk is created, just before it is added to the world.
-     * <br/><br/>
-     * Can be used to initialize the chunk based on saved user data in the world.
-     *
-     * @param chunk    The Minestom chunk being created
-     * @param userData The saved user data, or null if none is present
-     */
-    default void loadChunkData(@NotNull Chunk chunk, @Nullable NetworkBuffer userData) {
-    }
+  /**
+   * Called when a chunk is created, just before it is added to the world. <br>
+   * <br>
+   * Can be used to initialize the chunk based on saved user data in the world.
+   *
+   * @param chunk The Minestom chunk being created
+   * @param userData The saved user data, or null if none is present
+   */
+  default void loadChunkData(@NotNull Chunk chunk, @Nullable NetworkBuffer userData) {}
 
-    /**
-     * Called when a chunk is being saved.
-     * <br/><br/>
-     * Can be used to save user data in the chunk by writing it to the buffer.
-     *
-     * @param chunk    The Minestom chunk being saved
-     * @param userData A buffer to write user data to save
-     */
-    default void saveChunkData(@NotNull Chunk chunk, @NotNull NetworkBuffer userData) {
-    }
+  /**
+   * Called when a chunk is being saved. <br>
+   * <br>
+   * Can be used to save user data in the chunk by writing it to the buffer.
+   *
+   * @param chunk The Minestom chunk being saved
+   * @param userData A buffer to write user data to save
+   */
+  default void saveChunkData(@NotNull Chunk chunk, @NotNull NetworkBuffer userData) {}
 
-    @ApiStatus.Experimental
-    default void loadHeightmaps(@NotNull Chunk chunk, int[][] heightmaps) {
-    }
+  @ApiStatus.Experimental
+  default void loadHeightmaps(@NotNull Chunk chunk, int[][] heightmaps) {}
 
-    @ApiStatus.Experimental
-    default void saveHeightmaps(@NotNull Chunk chunk, int[][] heightmaps) {
-    }
+  @ApiStatus.Experimental
+  default void saveHeightmaps(@NotNull Chunk chunk, int[][] heightmaps) {}
 
-    /**
-     * Called when a chunk is being loaded by a {@link PolarLoader} to convert biome namespaces back to id.
-     * <br/><br/>
-     * It is valid to change the behavior as long as a biome is returned in all cases (i.e. have a default).
-     * <br/><br/>
-     * Biomes are cached by the loader per loader instance, so there will only be a single call per loader, even over many chunks.
-     *
-     * @param name The namespace ID of the biome, eg minecraft:plains
-     * @return The biome id
-     */
-    default int getBiomeId(@NotNull String name) {
-        var biomeRegistry = MinecraftServer.getBiomeRegistry();
-        return biomeRegistry.getId(RegistryKey.unsafeOf(name));
-    }
+  /**
+   * Called when a chunk is being loaded by a {@link PolarLoader} to convert biome namespaces back
+   * to id. <br>
+   * <br>
+   * It is valid to change the behavior as long as a biome is returned in all cases (i.e. have a
+   * default). <br>
+   * <br>
+   * Biomes are cached by the loader per loader instance, so there will only be a single call per
+   * loader, even over many chunks.
+   *
+   * @param name The namespace ID of the biome, eg minecraft:plains
+   * @return The biome id
+   */
+  default int getBiomeId(@NotNull String name) {
+    var biomeRegistry = MinecraftServer.getBiomeRegistry();
+    return biomeRegistry.getId(RegistryKey.unsafeOf(name));
+  }
 
-    default @NotNull String getBiomeName(int id) {
-        return PolarWorldAccess.DEFAULT.getBiomeName(id);
-    }
-
+  default @NotNull String getBiomeName(int id) {
+    return PolarWorldAccess.DEFAULT.getBiomeName(id);
+  }
 }

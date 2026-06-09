@@ -1,5 +1,12 @@
 package net.hollowcube.polar.io;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.io.ByteArrayInputStream;
+import java.nio.channels.Channels;
+import java.util.Random;
+import java.util.UUID;
 import net.hollowcube.polar.loader.PolarLoader;
 import net.hollowcube.polar.model.PolarWorld;
 import net.minestom.server.MinecraftServer;
@@ -8,104 +15,102 @@ import net.minestom.server.instance.block.Block;
 import net.minestom.server.world.DimensionType;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.nio.channels.Channels;
-import java.util.Random;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 public class TestBigPaletteReadWrite {
 
-    static {
-        MinecraftServer.init();
+  static {
+    MinecraftServer.init();
+  }
+
+  @Test
+  void testPackUnpackDirect() {
+    var ints = new int[4096];
+    for (int i = 0; i < 510; i++) {
+      ints[i] = i;
+    }
+    var bitsPerEntry = 9;
+
+    var longs = PaletteUtil.pack(ints, bitsPerEntry);
+    var out = new int[ints.length];
+    PaletteUtil.unpack(out, longs, bitsPerEntry);
+
+    assertArrayEquals(ints, out);
+  }
+
+  @Test
+  void testStreamLoader() {
+    var instance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
+
+    var random = new Random(22);
+    int blockCount = 256;
+
+    for (int y = 0; y < 16; y++) {
+      for (int z = 0; z < 16; z++) {
+        for (int x = 0; x < 16; x++) {
+          var block = Block.fromStateId(random.nextInt(blockCount));
+          instance.setBlock(x, y, z, block);
+        }
+      }
     }
 
-    @Test
-    void testPackUnpackDirect() {
-        var ints = new int[4096];
-        for (int i = 0; i < 510; i++) {
-            ints[i] = i;
+    var loader = new PolarLoader(new PolarWorld());
+    instance.setChunkLoader(loader);
+    instance.saveChunksToStorage().join();
+    var worldBytes = PolarWriter.write(loader.world());
+
+    var loadInstance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
+    PolarLoader.streamLoad(
+            loadInstance,
+            Channels.newChannel(new ByteArrayInputStream(worldBytes)),
+            worldBytes.length,
+            null,
+            null,
+            false)
+        .join();
+
+    random = new Random(22);
+    for (int y = 0; y < 16; y++) {
+      for (int z = 0; z < 16; z++) {
+        for (int x = 0; x < 16; x++) {
+          var block = Block.fromStateId(random.nextInt(blockCount));
+          assertEquals(block, loadInstance.getBlock(x, y, z));
         }
-        var bitsPerEntry = 9;
+      }
+    }
+  }
 
-        var longs = PaletteUtil.pack(ints, bitsPerEntry);
-        var out = new int[ints.length];
-        PaletteUtil.unpack(out, longs, bitsPerEntry);
+  @Test
+  void testLegacyLoader() {
+    var instance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
 
-        assertArrayEquals(ints, out);
+    var random = new Random(22);
+    int blockCount = 256;
+
+    for (int y = 0; y < 16; y++) {
+      for (int z = 0; z < 16; z++) {
+        for (int x = 0; x < 16; x++) {
+          var block = Block.fromStateId(random.nextInt(blockCount));
+          instance.setBlock(x, y, z, block);
+        }
+      }
     }
 
-    @Test
-    void testStreamLoader() {
-        var instance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
+    var loader = new PolarLoader(new PolarWorld());
+    instance.setChunkLoader(loader);
+    instance.saveChunksToStorage().join();
+    var worldBytes = PolarWriter.write(loader.world());
 
-        var random = new Random(22);
-        int blockCount = 256;
+    var loadInstance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
+    loadInstance.setChunkLoader(new PolarLoader(PolarReader.read(worldBytes)));
+    loadInstance.loadChunk(0, 0).join();
 
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    var block = Block.fromStateId(random.nextInt(blockCount));
-                    instance.setBlock(x, y, z, block);
-                }
-            }
+    random = new Random(22);
+    for (int y = 0; y < 16; y++) {
+      for (int z = 0; z < 16; z++) {
+        for (int x = 0; x < 16; x++) {
+          var block = Block.fromStateId(random.nextInt(blockCount));
+          assertEquals(block, loadInstance.getBlock(x, y, z));
         }
-
-        var loader = new PolarLoader(new PolarWorld());
-        instance.setChunkLoader(loader);
-        instance.saveChunksToStorage().join();
-        var worldBytes = PolarWriter.write(loader.world());
-
-        var loadInstance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
-        PolarLoader.streamLoad(loadInstance, Channels.newChannel(new ByteArrayInputStream(worldBytes)),
-                worldBytes.length, null, null, false).join();
-
-        random = new Random(22);
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    var block = Block.fromStateId(random.nextInt(blockCount));
-                    assertEquals(block, loadInstance.getBlock(x, y, z));
-                }
-            }
-        }
+      }
     }
-
-    @Test
-    void testLegacyLoader() {
-        var instance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
-
-        var random = new Random(22);
-        int blockCount = 256;
-
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    var block = Block.fromStateId(random.nextInt(blockCount));
-                    instance.setBlock(x, y, z, block);
-                }
-            }
-        }
-
-        var loader = new PolarLoader(new PolarWorld());
-        instance.setChunkLoader(loader);
-        instance.saveChunksToStorage().join();
-        var worldBytes = PolarWriter.write(loader.world());
-
-        var loadInstance = new InstanceContainer(UUID.randomUUID(), DimensionType.OVERWORLD);
-        loadInstance.setChunkLoader(new PolarLoader(PolarReader.read(worldBytes)));
-        loadInstance.loadChunk(0, 0).join();
-
-        random = new Random(22);
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    var block = Block.fromStateId(random.nextInt(blockCount));
-                    assertEquals(block, loadInstance.getBlock(x, y, z));
-                }
-            }
-        }
-    }
+  }
 }

@@ -1,53 +1,57 @@
 package net.hollowcube.polar.io;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.*;
+
+import org.junit.jupiter.api.Test;
 
 class TestReaderBackwardsCompatibility {
 
-    @Test
-    void testVersion1() {
-        runTest(1);
-    }
+  @Test
+  void testVersion1() {
+    runTest(1);
+  }
 
-    @Test
-    void testVersion2() {
-        runTest(2);
-    }
+  @Test
+  void testVersion2() {
+    runTest(2);
+  }
 
-    @Test
-    void testVersion3() {
-        runTest(3);
-    }
+  @Test
+  void testVersion3() {
+    runTest(3);
+  }
 
-    @Test
-    void testVersion4() {
-        runTest(4);
-    }
+  @Test
+  void testVersion4() {
+    runTest(4);
+  }
 
-    @Test
-    void testVersion5() {
-        runTest(5);
-    }
+  @Test
+  void testVersion5() {
+    runTest(5);
+  }
 
-    private static void runTest(int version) {
-        var is = TestReaderBackwardsCompatibility.class.getResourceAsStream("/backward/" + version + ".polar");
-        assertNotNull(is);
+  private static void runTest(int version) {
+    var is =
+        TestReaderBackwardsCompatibility.class.getResourceAsStream(
+            "/backward/" + version + ".polar");
+    assertNotNull(is);
 
-        var worldData = assertDoesNotThrow(is::readAllBytes);
-        var world = assertDoesNotThrow(() -> PolarReader.read(worldData));
-        assertNotNull(world);
+    var worldData = assertDoesNotThrow(is::readAllBytes);
+    var world = assertDoesNotThrow(() -> PolarReader.read(worldData));
+    assertNotNull(world);
 
-        assertEquals(32 * 32, world.chunks().size());
+    assertEquals(32 * 32, world.chunks().size());
 
-        var chunk = world.chunkAt(5, 5);
-        assertNotNull(chunk);
-        assertEquals(0, chunk.blockEntities().size());
+    var chunk = world.chunkAt(5, 5);
+    assertNotNull(chunk);
+    assertEquals(0, chunk.blockEntities().size());
 
-        var section = chunk.sections()[7];
-        var expectedPalette = new String[]{"granite", "stone", "diorite", "gravel", "coal_ore", "copper_ore", "iron_ore", "dirt"};
-        assertArrayEquals(expectedPalette, section.blockPalette());
-    }
-
+    var section = chunk.sections()[7];
+    var expectedPalette =
+        new String[] {
+          "granite", "stone", "diorite", "gravel", "coal_ore", "copper_ore", "iron_ore", "dirt"
+        };
+    assertArrayEquals(expectedPalette, section.blockPalette());
+  }
 }

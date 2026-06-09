@@ -8,20 +8,20 @@ import org.jetbrains.annotations.NotNull;
 
 @Slf4j
 final class DefaultPolarWorldAccess implements PolarWorldAccess {
-    @Override
-    public @NotNull String getBiomeName(int id) {
-        var biomeRegistry = MinecraftServer.getBiomeRegistry();
-        var biome = biomeRegistry.getKey(id);
-        if (biome == null) {
-            log.error("Failed to find biome: {}", id);
-            return Biome.PLAINS.name();
-        }
-        return biome.name();
+  @Override
+  public @NotNull String getBiomeName(int id) {
+    var biomeRegistry = MinecraftServer.getBiomeRegistry();
+    var biome = biomeRegistry.getKey(id);
+    if (biome == null) {
+      log.error("Failed to find biome: {}", id);
+      return Biome.PLAINS.name();
     }
+    return biome.name();
+  }
 
-    @Override
-    public int getBiomeId(@NotNull String name) {
-        var biomeRegistry = MinecraftServer.getBiomeRegistry();
-        return biomeRegistry.getId(RegistryKey.unsafeOf(name));
-    }
+  @Override
+  public int getBiomeId(@NotNull String name) {
+    var biomeRegistry = MinecraftServer.getBiomeRegistry();
+    return biomeRegistry.getId(RegistryKey.unsafeOf(name));
+  }
 }

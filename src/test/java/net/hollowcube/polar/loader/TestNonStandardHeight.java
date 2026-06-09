@@ -1,5 +1,8 @@
 package net.hollowcube.polar.loader;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.UUID;
 import net.hollowcube.polar.io.PolarReader;
 import net.hollowcube.polar.io.PolarWriter;
 import net.hollowcube.polar.model.PolarWorld;
@@ -10,50 +13,43 @@ import net.minestom.server.registry.RegistryKey;
 import net.minestom.server.world.DimensionType;
 import org.junit.jupiter.api.Test;
 
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 class TestNonStandardHeight {
-    static final DimensionType dimensionType = DimensionType.builder()
-            .minY(-2032)
-            .height(4064)
-            .build();
+  static final DimensionType dimensionType =
+      DimensionType.builder().minY(-2032).height(4064).build();
 
-    static final RegistryKey<DimensionType> dimensionTypeKey;
+  static final RegistryKey<DimensionType> dimensionTypeKey;
 
-    static {
-        MinecraftServer.init();
+  static {
+    MinecraftServer.init();
 
-        dimensionTypeKey = MinecraftServer
-                .getDimensionTypeRegistry()
-                .register("test:height", dimensionType);
-    }
+    dimensionTypeKey =
+        MinecraftServer.getDimensionTypeRegistry().register("test:height", dimensionType);
+  }
 
-    @Test
-    void testNonStandardDimensionHeight() {
-        InstanceContainer container = new InstanceContainer(UUID.randomUUID(), dimensionTypeKey);
+  @Test
+  void testNonStandardDimensionHeight() {
+    InstanceContainer container = new InstanceContainer(UUID.randomUUID(), dimensionTypeKey);
 
-        PolarWorld first = new PolarWorld();
+    PolarWorld first = new PolarWorld();
 
-        PolarLoader loader = new PolarLoader(first);
+    PolarLoader loader = new PolarLoader(first);
 
-        container.setChunkLoader(loader);
+    container.setChunkLoader(loader);
 
-        container.setBlock(0, 0, 0, Block.STONE);
+    container.setBlock(0, 0, 0, Block.STONE);
 
-        assertEquals(loader.world().minSection(), -4);
-        assertEquals(loader.world().maxSection(), 19);
+    assertEquals(loader.world().minSection(), -4);
+    assertEquals(loader.world().maxSection(), 19);
 
-        // writes chunks to PolarWorld
-        // should change the world height
-        container.saveInstance();
+    // writes chunks to PolarWorld
+    // should change the world height
+    container.saveInstance();
 
-        assertEquals(loader.world().minSection(), -127);
-        assertEquals(loader.world().maxSection(), 126);
+    assertEquals(loader.world().minSection(), -127);
+    assertEquals(loader.world().maxSection(), 126);
 
-        byte[] bytes = PolarWriter.write(loader.world());
+    byte[] bytes = PolarWriter.write(loader.world());
 
-        PolarReader.read(bytes);
-    }
+    PolarReader.read(bytes);
+  }
 }

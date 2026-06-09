@@ -16,7 +16,7 @@ public class ScuffedBenchmark {
         for (int iter = 0; iter < 10; iter++) {
             System.out.println("Starting iteration " + iter);
             // TNTLoader loader = new TNTLoader(new FileTNTSource(Path.of("src/test/resources/bench/bench.tnt")));
-            // AnvilLoader loader = new AnvilLoader(Path.of("src/test/resources/bench"));
+            // AnvilLoader loader = new AnvilLoader(Path.of("src/test/resources/bench"), DimensionType.OVERWORLD.key());
             PolarLoader loader = new PolarLoader(
                     PolarReader.read(Files.readAllBytes(Path.of("src/test/resources/bench.polar")))
             );
