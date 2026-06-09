@@ -2,6 +2,30 @@
 
 The polar format resembles the anvil format in many ways, though it is binary, not NBT.
 
+## Java API
+
+Polar exposes the on-disk layout through builder-based Java types. These mirror the binary structure below.
+
+| Type | Builder entry point | Notes |
+|------|---------------------|-------|
+| `PolarWorld` | `PolarWorld.builder()` | Defaults to latest version, current data version, zstd compression, overworld section range |
+| `PolarChunk` | `PolarChunk.builder()` / `PolarChunk.at(x, z, sectionCount)` | `sectionCount` should match `world.sectionCount()` |
+| `PolarSection` | `PolarSection.builder()` / `PolarSection.filled()` | Internal API; defaults to an empty section |
+| `PolarChunk.BlockEntity` | `PolarChunk.BlockEntity.builder()` | Nested builder for block entity records |
+| `PolarLoader` | `PolarLoader.builder()` / `PolarLoader.forWorld(world)` | Implements Minestom `ChunkLoader` |
+
+Example assembling a minimal world in memory:
+
+```java
+PolarWorld template = PolarWorld.empty();
+PolarWorld world = PolarWorld.builder()
+        .chunk(PolarChunk.at(0, 0, template.sectionCount()))
+        .build();
+
+byte[] file = PolarWriter.write(world);
+PolarWorld roundTrip = PolarReader.read(file);
+```
+
 ### Header
 
 | Name           | Type   | Notes                                                                   |
@@ -22,6 +46,8 @@ The polar format resembles the anvil format in many ways, though it is binary, n
 | Number of Chunks | varint       | Number of entries in the following array |
 | Chunks           | array[chunk] | Chunk data                               |
 
+Corresponds to `PolarWorld.minSection()`, `PolarWorld.maxSection()`, `PolarWorld.userData()`, and `PolarWorld.chunks()`.
+
 ### Chunk
 
 Entities or some other extra data field needs to be added to chunks in the future.
@@ -33,10 +59,12 @@ Entities or some other extra data field needs to be added to chunks in the futur
 | Sections                 | array[section]      | `maxSection-minSection+1` entries                                                    |
 | Number of Block Entities | varint              | Number of entries in the following array                                             |
 | Block Entities           | array[block entity] |                                                                                      |
-| Heightmap Mask           | int                 | A mask indicating which heightmaps are present. See `AnvilChunk` for flag constants. |
+| Heightmap Mask           | int                 | A mask indicating which heightmaps are present. See `PolarChunk` for flag constants. |
 | Heightmaps               | array[bytes]        | One heightmap for each bit present in Heightmap Mask                                 |
 | Length of user data      | varint              | Number of entries in the following array                                             |
 | User data                | array[byte]         | Arbitrary user data segment                                                          |
+
+Corresponds to `PolarChunk` record components. Build with `PolarChunk.builder()` or `PolarChunk.at(x, z, sectionCount)`.
 
 ### Sections
 
@@ -56,6 +84,8 @@ Entities or some other extra data field needs to be added to chunks in the futur
 | Sky Light Data Content    | byte          | 0 = no lighting, 1 = all zero, 2 = all max, 3 = present after     |
 | Sky Light                 | bytes         | A 2048 byte long nibble array, only present if above = 3          |
 
+Build non-empty sections with `PolarSection.filled()` and empty sections with `PolarSection.empty()`.
+
 ### Block Entity
 
 | Name            | Type   | Notes                                |
@@ -65,3 +95,5 @@ Entities or some other extra data field needs to be added to chunks in the futur
 | Block Entity ID | string |                                      |
 | Has NBT Data    | bool   | If unset, NBT Data is omitted        |
 | NBT Data        | nbt    |                                      |
+
+Build with `PolarChunk.BlockEntity.builder()`.

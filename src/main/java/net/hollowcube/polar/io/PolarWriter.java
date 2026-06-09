@@ -1,6 +1,7 @@
 package net.hollowcube.polar.io;
 
 import com.github.luben.zstd.Zstd;
+import lombok.experimental.UtilityClass;
 import net.hollowcube.polar.conversion.PolarDataConverter;
 import net.hollowcube.polar.model.PolarChunk;
 import net.hollowcube.polar.model.PolarSection;
@@ -15,10 +16,8 @@ import java.util.Arrays;
 import static net.minestom.server.network.NetworkBuffer.*;
 
 @SuppressWarnings("UnstableApiUsage")
+@UtilityClass
 public class PolarWriter {
-    private PolarWriter() {
-    }
-
     public static byte[] write(@NotNull PolarWorld world) {
         return write(world, PolarDataConverter.NOOP);
     }

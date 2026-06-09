@@ -1,5 +1,6 @@
 package net.hollowcube.polar.conversion;
 
+import lombok.experimental.UtilityClass;
 import net.hollowcube.polar.ChunkSelector;
 import net.hollowcube.polar.loader.PolarLoader;
 import net.hollowcube.polar.model.PolarWorld;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+@UtilityClass
 public class AnvilPolar {
 
     /**

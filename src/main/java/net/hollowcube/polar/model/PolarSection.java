@@ -1,5 +1,9 @@
 package net.hollowcube.polar.model;
 
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.experimental.Accessors;
+import lombok.experimental.FieldDefaults;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -11,41 +15,27 @@ import org.jetbrains.annotations.Nullable;
  * This class should be considered immutable.
  */
 @ApiStatus.Internal
+@Getter
+@Accessors(fluent = true)
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class PolarSection {
     public static final int BLOCK_PALETTE_SIZE = 4096;
     public static final int BIOME_PALETTE_SIZE = 64;
-
-    public enum LightContent {
-        MISSING, EMPTY, FULL, PRESENT;
-
-        public static final LightContent[] VALUES = values();
-    }
-
-    private final boolean empty;
-
-    private final String @NotNull [] blockPalette;
-    private final int @Nullable [] blockData;
-
-    private final String @NotNull [] biomePalette;
-    private final int @Nullable [] biomeData;
-
-    private final LightContent blockLightContent;
-    private final byte @Nullable [] blockLight;
-    private final LightContent skyLightContent;
-    private final byte @Nullable [] skyLight;
+    @Getter(AccessLevel.NONE)
+    boolean empty;
+    String @NotNull [] blockPalette;
+    @Getter(AccessLevel.NONE)
+    int @Nullable [] blockData;
+    String @NotNull [] biomePalette;
+    @Getter(AccessLevel.NONE)
+    int @Nullable [] biomeData;
+    LightContent blockLightContent;
+    byte @Nullable [] blockLight;
+    LightContent skyLightContent;
+    byte @Nullable [] skyLight;
 
     public PolarSection() {
-        this.empty = true;
-
-        this.blockPalette = new String[]{"minecraft:air"};
-        this.blockData = null;
-        this.biomePalette = new String[]{"minecraft:plains"};
-        this.biomeData = null;
-
-        this.blockLightContent = LightContent.MISSING;
-        this.blockLight = null;
-        this.skyLightContent = LightContent.MISSING;
-        this.skyLight = null;
+        this(builder());
     }
 
     public PolarSection(
@@ -54,62 +44,119 @@ public class PolarSection {
             @NotNull LightContent blockLightContent, byte @Nullable [] blockLight,
             @NotNull LightContent skyLightContent, byte @Nullable [] skyLight
     ) {
-        this.empty = false;
+        this(filled()
+                .blockPalette(blockPalette)
+                .blockData(blockData)
+                .biomePalette(biomePalette)
+                .biomeData(biomeData)
+                .blockLightContent(blockLightContent)
+                .blockLight(blockLight)
+                .skyLightContent(skyLightContent)
+                .skyLight(skyLight));
+    }
 
-        this.blockPalette = blockPalette;
-        this.blockData = blockData;
-        this.biomePalette = biomePalette;
-        this.biomeData = biomeData;
+    private PolarSection(@NotNull Builder builder) {
+        this.empty = builder.empty;
+        this.blockPalette = builder.blockPalette;
+        this.blockData = builder.blockData;
+        this.biomePalette = builder.biomePalette;
+        this.biomeData = builder.biomeData;
+        this.blockLightContent = builder.blockLightContent;
+        this.blockLight = builder.blockLight;
+        this.skyLightContent = builder.skyLightContent;
+        this.skyLight = builder.skyLight;
+    }
 
-        this.blockLightContent = blockLightContent;
-        this.blockLight = blockLight;
-        this.skyLightContent = skyLightContent;
-        this.skyLight = skyLight;
+    public static @NotNull Builder builder() {
+        return new Builder();
+    }
+
+    public static @NotNull PolarSection empty() {
+        return builder().build();
+    }
+
+    public static @NotNull Builder filled() {
+        return builder().empty(false);
     }
 
     public boolean isEmpty() {
         return empty;
     }
 
-    public @NotNull String @NotNull [] blockPalette() {
-        return blockPalette;
-    }
-
-    /**
-     * Returns the uncompressed palette data. Each int corresponds to an index in the palette.
-     * Always has a length of 4096.
-     */
     public int[] blockData() {
         assert blockData != null : "must check length of blockPalette() before using blockData()";
         return blockData;
     }
 
-    public @NotNull String @NotNull [] biomePalette() {
-        return biomePalette;
-    }
-
-    /**
-     * Returns the uncompressed palette data. Each int corresponds to an index in the palette.
-     * Always has a length of 256.
-     */
     public int[] biomeData() {
         assert biomeData != null : "must check length of biomePalette() before using biomeData()";
         return biomeData;
     }
 
-    public @NotNull LightContent blockLightContent() {
-        return blockLightContent;
+    public static final class Builder {
+        boolean empty = true;
+        String @NotNull [] blockPalette = new String[]{"minecraft:air"};
+        int @Nullable [] blockData = null;
+        String @NotNull [] biomePalette = new String[]{"minecraft:plains"};
+        int @Nullable [] biomeData = null;
+        LightContent blockLightContent = LightContent.MISSING;
+        byte @Nullable [] blockLight = null;
+        LightContent skyLightContent = LightContent.MISSING;
+        byte @Nullable [] skyLight = null;
+
+        public @NotNull Builder empty(boolean empty) {
+            this.empty = empty;
+            return this;
+        }
+
+        public @NotNull Builder blockPalette(String @NotNull [] blockPalette) {
+            this.blockPalette = blockPalette;
+            return this;
+        }
+
+        public @NotNull Builder blockData(int @Nullable [] blockData) {
+            this.blockData = blockData;
+            return this;
+        }
+
+        public @NotNull Builder biomePalette(String @NotNull [] biomePalette) {
+            this.biomePalette = biomePalette;
+            return this;
+        }
+
+        public @NotNull Builder biomeData(int @Nullable [] biomeData) {
+            this.biomeData = biomeData;
+            return this;
+        }
+
+        public @NotNull Builder blockLightContent(@NotNull LightContent blockLightContent) {
+            this.blockLightContent = blockLightContent;
+            return this;
+        }
+
+        public @NotNull Builder blockLight(byte @Nullable [] blockLight) {
+            this.blockLight = blockLight;
+            return this;
+        }
+
+        public @NotNull Builder skyLightContent(@NotNull LightContent skyLightContent) {
+            this.skyLightContent = skyLightContent;
+            return this;
+        }
+
+        public @NotNull Builder skyLight(byte @Nullable [] skyLight) {
+            this.skyLight = skyLight;
+            return this;
+        }
+
+        public @NotNull PolarSection build() {
+            return new PolarSection(this);
+        }
     }
 
-    public byte[] blockLight() {
-        return blockLight;
-    }
+    public enum LightContent {
+        MISSING, EMPTY, FULL, PRESENT;
 
-    public @NotNull LightContent skyLightContent() {
-        return skyLightContent;
-    }
-
-    public byte[] skyLight() {
-        return skyLight;
+        public static final LightContent[] VALUES = values();
     }
 }

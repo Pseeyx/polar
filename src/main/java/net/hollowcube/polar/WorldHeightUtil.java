@@ -1,13 +1,14 @@
 package net.hollowcube.polar;
 
+import lombok.experimental.UtilityClass;
 import net.hollowcube.polar.model.PolarChunk;
 import net.hollowcube.polar.model.PolarSection;
 import net.hollowcube.polar.model.PolarWorld;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.stream.Collectors;
 
+@UtilityClass
 public class WorldHeightUtil {
     public static @NotNull PolarWorld updateWorldHeight(@NotNull PolarWorld world, byte minSection, byte maxSection) {
         assert minSection <= maxSection : "minSection cannot be less than maxSection";
@@ -18,31 +19,31 @@ public class WorldHeightUtil {
             chunks.add(updateChunkHeight(chunk, minSection, maxSection));
         }
 
-        return new PolarWorld(
-                world.version(),
-                world.dataVersion(),
-                world.compression(),
-                minSection,
-                maxSection,
-                world.userData(),
-                chunks
-        );
+        var builder = PolarWorld.builder()
+                .version(world.version())
+                .dataVersion(world.dataVersion())
+                .compression(world.compression())
+                .minSection(minSection)
+                .maxSection(maxSection)
+                .userData(world.userData());
+        for (var chunk : chunks) builder.chunk(chunk);
+        return builder.build();
     }
 
     public static @NotNull PolarChunk updateChunkHeight(@NotNull PolarChunk chunk, byte minSection, byte maxSection) {
         PolarSection[] sections = new PolarSection[maxSection - minSection + 1];
 
         for (int i = 0; i <= maxSection - minSection; i++) {
-            sections[i] = i < chunk.sections().length ? chunk.sections()[i] : new PolarSection();
+            sections[i] = i < chunk.sections().length ? chunk.sections()[i] : PolarSection.empty();
         }
 
-        return new PolarChunk(
-                chunk.x(),
-                chunk.z(),
-                sections,
-                chunk.blockEntities(),
-                chunk.heightmaps(),
-                chunk.userData()
-        );
+        return PolarChunk.builder()
+                .x(chunk.x())
+                .z(chunk.z())
+                .sections(sections)
+                .blockEntities(chunk.blockEntities())
+                .heightmaps(chunk.heightmaps())
+                .userData(chunk.userData())
+                .build();
     }
 }

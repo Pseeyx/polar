@@ -1,6 +1,8 @@
 package net.hollowcube.polar.loader;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import lombok.SneakyThrows;
+import lombok.experimental.UtilityClass;
 import net.minestom.server.instance.Chunk;
 import net.minestom.server.instance.DynamicChunk;
 import net.minestom.server.instance.InstanceContainer;
@@ -13,6 +15,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@UtilityClass
 final class UnsafeOps {
     private static final MethodHandle CACHE_CHUNK_HANDLE;
     private static final MethodHandle CHUNK_ON_LOAD_HANDLE;
@@ -20,84 +23,8 @@ final class UnsafeOps {
     private static final MethodHandle DYNAMIC_CHUNK_ENTRIES_GETTER;
     private static final MethodHandle DYNAMIC_CHUNK_TICKABLE_MAP_GETTER;
 
-    private static final MethodHandle BLOCK_LIGHT_CONTENT_SETTER;
-    private static final MethodHandle BLOCK_LIGHT_CONTENT_PROPAGATION_SETTER;
-    private static final MethodHandle BLOCK_LIGHT_IS_VALID_BORDERS_SETTER;
-    private static final MethodHandle BLOCK_LIGHT_NEEDS_SEND_GETTER;
-    private static final MethodHandle SKY_LIGHT_CONTENT_SETTER;
-    private static final MethodHandle SKY_LIGHT_CONTENT_PROPAGATION_SETTER;
-    private static final MethodHandle SKY_LIGHT_IS_VALID_BORDERS_SETTER;
-    private static final MethodHandle SKY_LIGHT_NEEDS_SEND_GETTER;
-
-    static void unsafeCacheChunk(@NotNull InstanceContainer instance, @NotNull Chunk chunk) {
-        try {
-            CACHE_CHUNK_HANDLE.invokeExact(instance, chunk);
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
-    }
-
-    static void unsafeChunkOnLoad(@NotNull Chunk chunk) {
-        try {
-            CHUNK_ON_LOAD_HANDLE.invokeExact(chunk);
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
-    }
-
-    static void unsafeSetNeedsCompleteHeightmapRefresh(@NotNull Chunk chunk, boolean value) {
-        if (chunk instanceof DynamicChunk dynamicChunk) {
-            try {
-                NEEDS_HEIGHTMAP_REFRESH_SETTER.invokeExact(dynamicChunk, value);
-            } catch (Throwable t) {
-                throw new RuntimeException(t);
-            }
-        }
-    }
-
-    static @Nullable Int2ObjectOpenHashMap<Block> unsafeGetEntries(@NotNull Chunk chunk) {
-        if (chunk instanceof DynamicChunk dynamicChunk) {
-            try {
-                return (Int2ObjectOpenHashMap<Block>) DYNAMIC_CHUNK_ENTRIES_GETTER.invokeExact(dynamicChunk);
-            } catch (Throwable t) {
-                throw new RuntimeException(t);
-            }
-        } else return null;
-    }
-
-    static @Nullable Int2ObjectOpenHashMap<Block> unsafeGetTickableMap(@NotNull Chunk chunk) {
-        if (chunk instanceof DynamicChunk dynamicChunk) {
-            try {
-                return (Int2ObjectOpenHashMap<Block>) DYNAMIC_CHUNK_TICKABLE_MAP_GETTER.invokeExact(dynamicChunk);
-            } catch (Throwable t) {
-                throw new RuntimeException(t);
-            }
-        } else return null;
-    }
-
-    static void unsafeUpdateBlockLightArray(@NotNull Light light, byte[] content) {
-        try {
-            BLOCK_LIGHT_CONTENT_SETTER.invoke(light, content);
-            BLOCK_LIGHT_CONTENT_PROPAGATION_SETTER.invoke(light, content);
-            BLOCK_LIGHT_IS_VALID_BORDERS_SETTER.invoke(light, true);
-            var needsSend = (AtomicBoolean) BLOCK_LIGHT_NEEDS_SEND_GETTER.invoke(light);
-            needsSend.set(true);
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
-    }
-
-    static void unsafeUpdateSkyLightArray(@NotNull Light light, byte[] content) {
-        try {
-            SKY_LIGHT_CONTENT_SETTER.invoke(light, content);
-            SKY_LIGHT_CONTENT_PROPAGATION_SETTER.invoke(light, content);
-            SKY_LIGHT_IS_VALID_BORDERS_SETTER.invoke(light, true);
-            var needsSend = (AtomicBoolean) SKY_LIGHT_NEEDS_SEND_GETTER.invoke(light);
-            needsSend.set(true);
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
-    }
+    private static final LightFieldHandles BLOCK_LIGHT_HANDLES;
+    private static final LightFieldHandles SKY_LIGHT_HANDLES;
 
     static {
         try {
@@ -111,38 +38,90 @@ final class UnsafeOps {
         try {
             var lookup = MethodHandles.privateLookupIn(DynamicChunk.class, MethodHandles.lookup());
             NEEDS_HEIGHTMAP_REFRESH_SETTER = lookup.unreflectSetter(DynamicChunk.class
-                                                                            .getDeclaredField(
-                                                                                    "needsCompleteHeightmapRefresh"));
-            DYNAMIC_CHUNK_ENTRIES_GETTER = lookup.unreflectGetter(DynamicChunk.class
-                                                                          .getDeclaredField("entries"));
-            DYNAMIC_CHUNK_TICKABLE_MAP_GETTER = lookup.unreflectGetter(DynamicChunk.class
-                                                                               .getDeclaredField("tickableMap"));
+                    .getDeclaredField("needsCompleteHeightmapRefresh"));
+            DYNAMIC_CHUNK_ENTRIES_GETTER = lookup.unreflectGetter(DynamicChunk.class.getDeclaredField("entries"));
+            DYNAMIC_CHUNK_TICKABLE_MAP_GETTER = lookup.unreflectGetter(DynamicChunk.class.getDeclaredField("tickableMap"));
             CHUNK_ON_LOAD_HANDLE = lookup.unreflect(Chunk.class.getDeclaredMethod("onLoad"));
         } catch (IllegalAccessException | NoSuchFieldException | NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
 
-        try {
-            var blockLight = Class.forName("net.minestom.server.instance.light.BlockLight");
-            var lookup = MethodHandles.privateLookupIn(blockLight, MethodHandles.lookup());
-            BLOCK_LIGHT_CONTENT_SETTER = lookup.unreflectSetter(blockLight.getDeclaredField("content"));
-            BLOCK_LIGHT_CONTENT_PROPAGATION_SETTER = lookup.unreflectSetter(
-                    blockLight.getDeclaredField("contentPropagation"));
-            BLOCK_LIGHT_IS_VALID_BORDERS_SETTER = lookup.unreflectSetter(blockLight.getDeclaredField("isValidBorders"));
-            BLOCK_LIGHT_NEEDS_SEND_GETTER = lookup.unreflectGetter(blockLight.getDeclaredField("needsSend"));
-        } catch (NoSuchFieldException | ClassNotFoundException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+        BLOCK_LIGHT_HANDLES = LightFieldHandles.resolve("net.minestom.server.instance.light.BlockLight");
+        SKY_LIGHT_HANDLES = LightFieldHandles.resolve("net.minestom.server.instance.light.SkyLight");
+    }
+
+    static void unsafeCacheChunk(@NotNull InstanceContainer instance, @NotNull Chunk chunk) {
+        invokeVoid(CACHE_CHUNK_HANDLE, instance, chunk);
+    }
+
+    static void unsafeChunkOnLoad(@NotNull Chunk chunk) {
+        invokeVoid(CHUNK_ON_LOAD_HANDLE, chunk);
+    }
+
+    static void unsafeSetNeedsCompleteHeightmapRefresh(@NotNull Chunk chunk, boolean value) {
+        if (chunk instanceof DynamicChunk dynamicChunk) {
+            invokeVoid(NEEDS_HEIGHTMAP_REFRESH_SETTER, dynamicChunk, value);
         }
-        try {
-            var skyLight = Class.forName("net.minestom.server.instance.light.SkyLight");
-            var lookup = MethodHandles.privateLookupIn(skyLight, MethodHandles.lookup());
-            SKY_LIGHT_CONTENT_SETTER = lookup.unreflectSetter(skyLight.getDeclaredField("content"));
-            SKY_LIGHT_CONTENT_PROPAGATION_SETTER = lookup.unreflectSetter(
-                    skyLight.getDeclaredField("contentPropagation"));
-            SKY_LIGHT_IS_VALID_BORDERS_SETTER = lookup.unreflectSetter(skyLight.getDeclaredField("isValidBorders"));
-            SKY_LIGHT_NEEDS_SEND_GETTER = lookup.unreflectGetter(skyLight.getDeclaredField("needsSend"));
-        } catch (NoSuchFieldException | ClassNotFoundException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+    }
+
+    static @Nullable Int2ObjectOpenHashMap<Block> unsafeGetEntries(@NotNull Chunk chunk) {
+        if (chunk instanceof DynamicChunk dynamicChunk) {
+            return invoke(DYNAMIC_CHUNK_ENTRIES_GETTER, dynamicChunk);
+        }
+        return null;
+    }
+
+    static @Nullable Int2ObjectOpenHashMap<Block> unsafeGetTickableMap(@NotNull Chunk chunk) {
+        if (chunk instanceof DynamicChunk dynamicChunk) {
+            return invoke(DYNAMIC_CHUNK_TICKABLE_MAP_GETTER, dynamicChunk);
+        }
+        return null;
+    }
+
+    static void unsafeUpdateBlockLightArray(@NotNull Light light, byte[] content) {
+        BLOCK_LIGHT_HANDLES.update(light, content);
+    }
+
+    static void unsafeUpdateSkyLightArray(@NotNull Light light, byte[] content) {
+        SKY_LIGHT_HANDLES.update(light, content);
+    }
+
+    @SneakyThrows
+    private static void invokeVoid(MethodHandle handle, Object... args) {
+        handle.invokeWithArguments(args);
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    private static <T> T invoke(MethodHandle handle, Object... args) {
+        return (T) handle.invokeWithArguments(args);
+    }
+
+    private record LightFieldHandles(
+            MethodHandle contentSetter,
+            MethodHandle contentPropagationSetter,
+            MethodHandle isValidBordersSetter,
+            MethodHandle needsSendGetter
+    ) {
+        @SneakyThrows
+        static LightFieldHandles resolve(@NotNull String className) {
+            var lightClass = Class.forName(className);
+            var lookup = MethodHandles.privateLookupIn(lightClass, MethodHandles.lookup());
+            return new LightFieldHandles(
+                    lookup.unreflectSetter(lightClass.getDeclaredField("content")),
+                    lookup.unreflectSetter(lightClass.getDeclaredField("contentPropagation")),
+                    lookup.unreflectSetter(lightClass.getDeclaredField("isValidBorders")),
+                    lookup.unreflectGetter(lightClass.getDeclaredField("needsSend"))
+            );
+        }
+
+        @SneakyThrows
+        void update(@NotNull Light light, byte[] content) {
+            contentSetter.invoke(light, content);
+            contentPropagationSetter.invoke(light, content);
+            isValidBordersSetter.invoke(light, true);
+            var needsSend = (AtomicBoolean) needsSendGetter.invoke(light);
+            needsSend.set(true);
         }
     }
 }

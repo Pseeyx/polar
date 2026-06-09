@@ -15,7 +15,7 @@ The Polar format is described in [FORMAT.md](FORMAT.md).
 
 * [Fast to load](#benchmark)
 * [Small file size](#benchmark)
-* Simple to use
+* Simple builder-based API
 * [Anvil conversion](#anvil-interop)
 
 ## Install
@@ -36,34 +36,130 @@ dependencies {
 
 Polar provides a `ChunkLoader` implementation for use with Minestom `Instance`s.
 
-```
-// Loading
-Instance instance=...;
+### Loading and saving
+
+```java
+// Load from a file on disk
+Instance instance = ...;
 instance.setChunkLoader(new PolarLoader(Path.of("/path/to/file.polar")));
 
-// Saving
+// Save all loaded chunks back to storage
 instance.saveChunksToStorage();
+```
+
+### Builder API
+
+Polar uses fluent builders for worlds, chunks, sections, and loaders. Existing constructors still work; builders are the
+recommended way to create or configure data.
+
+#### PolarWorld
+
+```java
+// Empty overworld-height world (sections -4 through 19)
+PolarWorld world = PolarWorld.builder().build();
+// or
+PolarWorld world = PolarWorld.empty();
+
+// Match a dimension's height
+PolarWorld world = PolarWorld.from(DimensionType.OVERWORLD).build();
+
+// Full control
+PolarWorld world = PolarWorld.builder()
+        .compression(PolarWorld.CompressionType.ZSTD)
+        .minSection((byte) -4)
+        .maxSection((byte) 19)
+        .userData(myBytes)
+        .chunk(someChunk)
+        .build();
+```
+
+#### PolarChunk
+
+```java
+int sectionCount = world.sectionCount();
+
+// Empty chunk at 0, 0 with the correct number of sections
+PolarChunk chunk = PolarChunk.at(0, 0, sectionCount);
+
+// Or build manually
+PolarChunk chunk = PolarChunk.builder()
+        .x(0)
+        .z(0)
+        .sections(PolarChunk.emptySections(sectionCount))
+        .build();
+
+// Add block entities with a nested builder
+PolarChunk.BlockEntity entity = PolarChunk.BlockEntity.builder()
+        .x(1).y(64).z(2)
+        .id("minecraft:chest")
+        .data(nbt)
+        .build();
+```
+
+#### PolarSection
+
+`PolarSection` is internal API, but useful when constructing worlds programmatically (for example in tests).
+
+```java
+// Empty section (air blocks, plains biome, no lighting)
+PolarSection section = PolarSection.empty();
+
+// Filled section
+PolarSection section = PolarSection.filled()
+        .blockPalette(new String[]{"minecraft:stone"})
+        .biomePalette(new String[]{"minecraft:plains"})
+        .blockLightContent(PolarSection.LightContent.FULL)
+        .skyLightContent(PolarSection.LightContent.FULL)
+        .build();
+```
+
+#### PolarLoader
+
+```java
+// From file (creates an empty world if the file does not exist yet)
+PolarLoader loader = new PolarLoader(Path.of("world.polar"));
+
+// Recommended: configure with the builder
+PolarLoader loader = PolarLoader.builder()
+        .savePath(Path.of("world.polar"))
+        .worldData(PolarWorld.empty())
+        .worldAccess(new UpdateTimeWorldAccess())
+        .parallel(true)
+        .loadLighting(true)
+        .build();
+
+// Shorthand when you already have a world
+PolarLoader loader = PolarLoader.forWorld(world)
+        .savePath(path)
+        .build();
+```
+
+#### Read and write bytes
+
+```java
+byte[] bytes = PolarWriter.write(world);
+PolarWorld loaded = PolarReader.read(bytes);
 ```
 
 ### Anvil interop
 
-Anvil conversion utilities are also included, and can be used something like the following.
+Anvil conversion utilities are also included.
 
 > Note: Anvil conversion is only guaranteed to work on the latest version worlds. Try loading and saving the world in a
-> vanilla client or server if it doesnt work!
+> vanilla client or server if it doesn't work!
 
-```
-var polarWorld = AnvilPolar.anvilToPolar(Path.of("/path/to/anvil/world/dir"));
-var polarWorldBytes=PolarWriter.write(polarWorld);
+```java
+PolarWorld polarWorld = AnvilPolar.anvilToPolar(Path.of("/path/to/anvil/world/dir"));
+byte[] polarWorldBytes = PolarWriter.write(polarWorld);
 ```
 
 ### ChunkSelector
 
 Most Polar functions take a `ChunkSelector` as an optional parameter to select which chunks to include in that
 operation.
-For example, to convert an anvil world while only selecting a 5 chunk radius around 0,0, you could do the following:
+For example, to convert an anvil world while only selecting a 5 chunk radius around 0,0:
 
-```
+```java
 AnvilPolar.anvilToPolar(Path.of("/path/to/anvil/world/dir"), ChunkSelector.radius(5));
 ```
 
@@ -71,35 +167,41 @@ AnvilPolar.anvilToPolar(Path.of("/path/to/anvil/world/dir"), ChunkSelector.radiu
 
 By default, Polar only stores blocks, biomes, block entities, and light data. However, in many cases it is desirable
 to have some additional user specific data stored in the world. To accommodate this use case, Polar chunks each have
-a "user data" field, which can contain any arbitrary data. To work with it, you must implement `PolarWorldAccess`,
-and provide an instance to the `PolarLoader` for example, the following will write the time of save in each chunks
-user data:
+a "user data" field, which can contain any arbitrary data. To work with it, implement `PolarWorldAccess` and attach
+it to the loader.
 
 ```java
+@Slf4j
 public class UpdateTimeWorldAccess implements PolarWorldAccess {
-    private static final Logger logger = LoggerFactory.getLogger(UpdateTimeWorldAccess.class);
+    public long saveTime = 0;
+    public long loadTime = 0;
 
     @Override
     public void loadChunkData(@NotNull Chunk chunk, @Nullable NetworkBuffer userData) {
-        if (userData == null) return; // No saved data, probably first load
+        if (userData == null) return;
 
         long lastSaveTime = userData.read(NetworkBuffer.LONG);
-        logger.info("loading chunk {}, {} which was saved at {}.", chunk.getChunkX(), chunk.getChunkZ(), lastSaveTime);
+        log.info("loading chunk {}, {} which was saved at {}.", chunk.getChunkX(), chunk.getChunkZ(), lastSaveTime);
+        loadTime = lastSaveTime;
     }
 
     @Override
     public void saveChunkData(@NotNull Chunk chunk, @NotNull NetworkBuffer userData) {
-        userData.write(NetworkBuffer.LONG, System.currentTimeMillis());
+        saveTime = System.currentTimeMillis();
+        userData.write(NetworkBuffer.LONG, saveTime);
     }
 }
 ```
 
-Using a `PolarWorldAccess` implementation is as simple as attaching it to the `PolarLoader`:
-`new PolarLoader(world).setWorldAccess(new UpdateTimeWorldAccess())`
+```java
+PolarLoader loader = PolarLoader.forWorld(world)
+        .worldAccess(new UpdateTimeWorldAccess())
+        .build();
+```
 
 ## Comparison to others
 
-### "Benchmark"
+### Benchmark
 
 Using a very basic benchmark, we can make some rough guesses about performance between Polar, Anvil, and TNT.
 The benchmark loads a single region 10 times, averaging the runtime of each iteration.

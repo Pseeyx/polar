@@ -1,6 +1,8 @@
 package net.hollowcube.polar.io;
 
 import com.github.luben.zstd.Zstd;
+import lombok.SneakyThrows;
+import lombok.experimental.UtilityClass;
 import net.hollowcube.polar.conversion.PolarDataConverter;
 import net.hollowcube.polar.model.PolarChunk;
 import net.hollowcube.polar.model.PolarSection;
@@ -22,15 +24,13 @@ import java.util.ArrayList;
 
 import static net.minestom.server.network.NetworkBuffer.*;
 
+@UtilityClass
 public class PolarReader {
-    @ApiStatus.Internal public static final NetworkBuffer.Type<byte[]> LIGHT_DATA = NetworkBuffer.FixedRawBytes(2048);
-
-    private static final boolean FORCE_LEGACY_NBT = Boolean.getBoolean("polar.debug.force-legacy-nbt");
+    @ApiStatus.Internal
+    public static final NetworkBuffer.Type<byte[]> LIGHT_DATA = NetworkBuffer.FixedRawBytes(2048);
     static final int MAX_BLOCK_PALETTE_SIZE = 16 * 16 * 16;
     static final int MAX_BIOME_PALETTE_SIZE = 8 * 8 * 8;
-
-    private PolarReader() {
-    }
+    private static final boolean FORCE_LEGACY_NBT = Boolean.getBoolean("polar.debug.force-legacy-nbt");
 
     public static @NotNull PolarWorld read(byte @NotNull [] data) {
         return read(data, PolarDataConverter.NOOP);
@@ -254,21 +254,18 @@ public class PolarReader {
      *
      * @see NetworkBuffer#NBT
      */
+    @SneakyThrows
     private static BinaryTag legacyReadNBT(@NotNull NetworkBuffer buffer) {
-        try {
-            var nbtReader = new BinaryTagReader(new DataInputStream(new InputStream() {
-                public int read() {
-                    return buffer.read(NetworkBuffer.BYTE) & 255;
-                }
+        var nbtReader = new BinaryTagReader(new DataInputStream(new InputStream() {
+            public int read() {
+                return buffer.read(NetworkBuffer.BYTE) & 255;
+            }
 
-                public int available() {
-                    return (int) buffer.readableBytes();
-                }
-            }));
-            return nbtReader.readNamed().getValue();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+            public int available() {
+                return (int) buffer.readableBytes();
+            }
+        }));
+        return nbtReader.readNamed().getValue();
     }
 
     @Contract("false, _ -> fail")
@@ -277,8 +274,8 @@ public class PolarReader {
         if (!condition) throw new Error(message);
     }
 
-    public static class Error extends RuntimeException {
-        private Error(String message) {
+    public static final class Error extends RuntimeException {
+        private Error(@NotNull String message) {
             super(message);
         }
     }

@@ -1,12 +1,12 @@
 package net.hollowcube.polar.io;
 
+import lombok.experimental.UtilityClass;
 import net.minestom.server.utils.validate.Check;
 import org.jetbrains.annotations.ApiStatus;
 
 @ApiStatus.Internal
-public final class PaletteUtil {
-    private PaletteUtil() {}
-
+@UtilityClass
+public class PaletteUtil {
     public static int bitsToRepresent(int n) {
         Check.argCondition(n < 1, "n must be greater than 0");
         return Integer.SIZE - Integer.numberOfLeadingZeros(n);
@@ -31,7 +31,7 @@ public final class PaletteUtil {
     }
 
     public static void unpack(int[] out, long[] in, int bitsPerEntry) {
-        assert in.length != 0: "unpack input array is zero";
+        assert in.length != 0 : "unpack input array is zero";
 
         var intsPerLong = Math.floor(64d / bitsPerEntry);
         var intsPerLongCeil = (int) Math.ceil(intsPerLong);

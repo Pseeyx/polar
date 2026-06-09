@@ -2,6 +2,11 @@ package net.hollowcube.polar.loader;
 
 import it.unimi.dsi.fastutil.shorts.Short2ObjectMap;
 import it.unimi.dsi.fastutil.shorts.Short2ObjectOpenHashMap;
+import lombok.AccessLevel;
+import lombok.Setter;
+import lombok.experimental.Accessors;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 import net.hollowcube.polar.conversion.PolarDataConverter;
 import net.hollowcube.polar.io.PolarReader;
 import net.hollowcube.polar.io.PolarWriter;
@@ -24,8 +29,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,10 +44,81 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import static net.minestom.server.instance.Chunk.CHUNK_SECTION_SIZE;
 
 @SuppressWarnings("UnstableApiUsage")
+@FieldDefaults(level = AccessLevel.PRIVATE)
+@Slf4j
 public class PolarLoader implements ChunkLoader {
-    @ApiStatus.Internal public static final Logger logger = LoggerFactory.getLogger(PolarLoader.class);
-    private static final BlockManager BLOCK_MANAGER = MinecraftServer.getBlockManager();
-    private static final ExceptionManager EXCEPTION_HANDLER = MinecraftServer.getExceptionManager();
+    static final BlockManager BLOCK_MANAGER = MinecraftServer.getBlockManager();
+    static final ExceptionManager EXCEPTION_HANDLER = MinecraftServer.getExceptionManager();
+    final Map<String, Integer> biomeReadCache = new ConcurrentHashMap<>();
+    final Map<Integer, String> biomeWriteCache = new ConcurrentHashMap<>();
+    final Path savePath;
+    final ReentrantReadWriteLock worldDataLock = new ReentrantReadWriteLock();
+    final PolarWorld worldData;
+    PolarWorldAccess worldAccess = PolarWorldAccess.DEFAULT;
+    /**
+     * Sets the loader to save and load in parallel.
+     * <br/><br/>
+     * The Polar loader on its own supports parallel load out of the box, but
+     * a user implementation of {@link PolarWorldAccess} may not support parallel
+     * operations, so care must be taken when enabling this option.
+     */
+    @Setter
+    @Accessors(chain = true)
+    boolean parallel = false;
+    @Setter
+    @Accessors(chain = true)
+    boolean loadLighting = true;
+    int plainsBiomeId = 0; // Always 0 in minestom
+
+    public PolarLoader(@NotNull Path path) throws IOException {
+        this(path, Files.exists(path) ? PolarReader.read(Files.readAllBytes(path)) : PolarWorld.empty());
+    }
+
+    public PolarLoader(@NotNull Path savePath, @NotNull PolarWorld worldData) {
+        this(savePath, worldData, PolarWorldAccess.DEFAULT, false, true);
+    }
+
+    public PolarLoader(@NotNull InputStream inputStream) throws IOException {
+        byte[] data;
+        try (inputStream) {
+            data = inputStream.readAllBytes();
+        }
+        this(null, PolarReader.read(data));
+    }
+
+    public PolarLoader(@NotNull PolarWorld world) {
+        this(null, world);
+    }
+
+    PolarLoader(
+            @Nullable Path savePath,
+            @NotNull PolarWorld worldData,
+            @NotNull PolarWorldAccess worldAccess,
+            boolean parallel,
+            boolean loadLighting
+    ) {
+        this.savePath = savePath;
+        this.worldData = worldData;
+        this.worldAccess = worldAccess;
+        this.parallel = parallel;
+        this.loadLighting = loadLighting;
+        initPlainsBiomeId();
+    }
+
+    public static @NotNull Builder builder() {
+        return new Builder();
+    }
+
+    public static @NotNull Builder forWorld(@NotNull PolarWorld worldData) {
+        return builder().worldData(worldData);
+    }
+
+    private void initPlainsBiomeId() {
+        this.plainsBiomeId = this.worldAccess.getBiomeId(Biome.PLAINS.name());
+        if (this.plainsBiomeId == -1) {
+            throw new IllegalStateException("Plains biome not found");
+        }
+    }
 
     /**
      * Loads a polar world into an instance in a streaming manner.
@@ -78,80 +152,45 @@ public class PolarLoader implements ChunkLoader {
         return future;
     }
 
-    private final Map<String, Integer> biomeReadCache = new ConcurrentHashMap<>();
-    private final Map<Integer, String> biomeWriteCache = new ConcurrentHashMap<>();
-
-    private final Path savePath;
-    private final ReentrantReadWriteLock worldDataLock = new ReentrantReadWriteLock();
-    private final PolarWorld worldData;
-
-    private PolarWorldAccess worldAccess = PolarWorldAccess.DEFAULT;
-    private boolean parallel = false;
-    private boolean loadLighting = true;
-
-    private int plainsBiomeId = 0; // Always 0 in minestom
-
-    public PolarLoader(@NotNull Path path) throws IOException {
-        this(path, Files.exists(path) ? PolarReader.read(Files.readAllBytes(path)) : new PolarWorld());
+    @ApiStatus.Internal
+    public static byte[] getLightArray(@NotNull LightContent content, byte @Nullable [] data) {
+        return switch (content) {
+            case MISSING -> null;
+            case EMPTY -> LightCompute.EMPTY_CONTENT;
+            case FULL -> LightCompute.CONTENT_FULLY_LIT;
+            case PRESENT -> data;
+        };
     }
 
-    public PolarLoader(@NotNull Path savePath, @NotNull PolarWorld worldData) {
-        this.savePath = savePath;
-        this.worldData = worldData;
+    @ApiStatus.Internal
+    public static @NotNull Block createBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
+        // Fetch the block type, we can ignore Handler/NBT since we are about to replace it
+        var block = chunk.getBlock(blockEntity.x(), blockEntity.y(), blockEntity.z(), Block.Getter.Condition.TYPE);
+        if (blockEntity.id() != null)
+            block = block.withHandler(BLOCK_MANAGER.getHandlerOrDummy(blockEntity.id()));
+        if (blockEntity.data() != null)
+            block = block.withNbt(blockEntity.data());
+        return block;
     }
 
-    public PolarLoader(@NotNull InputStream inputStream) throws IOException {
-        try (inputStream) {
-            this.worldData = PolarReader.read(inputStream.readAllBytes());
-            this.savePath = null;
-        }
-    }
-
-    public PolarLoader(@NotNull PolarWorld world) {
-        this.worldData = world;
-        this.savePath = null;
+    @ApiStatus.Internal
+    public static void loadBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
+        var block = createBlockEntity(chunk, blockEntity);
+        chunk.setBlock(blockEntity.x(), blockEntity.y(), blockEntity.z(), block);
     }
 
     public @NotNull PolarWorld world() {
         return worldData;
     }
 
+    // Loading
+
     @Contract("_ -> this")
     public @NotNull PolarLoader setWorldAccess(@NotNull PolarWorldAccess worldAccess) {
         this.worldAccess = worldAccess;
-
-        this.plainsBiomeId = this.worldAccess.getBiomeId(Biome.PLAINS.name());
-        if (this.plainsBiomeId == -1) {
-            throw new IllegalStateException("Plains biome not found");
-        }
-
+        initPlainsBiomeId();
         return this;
     }
-
-    /**
-     * Sets the loader to save and load in parallel.
-     * <br/><br/>
-     * The Polar loader on its own supports parallel load out of the box, but
-     * a user implementation of {@link PolarWorldAccess} may not support parallel
-     * operations, so care must be taken when enabling this option.
-     *
-     * @param parallel True to load and save chunks in parallel, false otherwise.
-     * @return this
-     */
-    @Contract("_ -> this")
-    public @NotNull PolarLoader setParallel(boolean parallel) {
-        this.parallel = parallel;
-        return this;
-    }
-
-    @Contract("_ -> this")
-    public @NotNull PolarLoader setLoadLighting(boolean loadLighting) {
-        this.loadLighting = loadLighting;
-        return this;
-    }
-
-    // Loading
-
 
     @Override
     public boolean supportsParallelLoading() {
@@ -181,9 +220,8 @@ public class PolarLoader implements ChunkLoader {
 
         // Load the chunk
         var chunk = instance.getChunkSupplier().createChunk(instance, chunkX, chunkZ);
-        synchronized (chunk) {
-            //todo replace with java locks, not synchronized
-            //   actually on second thought, do we really even need to lock the chunk? it is a local variable still
+        chunk.lockWriteLock();
+        try {
             int sectionY = chunk.getMinSection();
             for (var sectionData : chunkData.sections()) {
                 if (sectionData.isEmpty()) {
@@ -206,6 +244,8 @@ public class PolarLoader implements ChunkLoader {
             if (userData.length > 0) {
                 worldAccess.loadChunkData(chunk, NetworkBuffer.wrap(userData, 0, userData.length));
             }
+        } finally {
+            chunk.unlockWriteLock();
         }
 
         return chunk;
@@ -222,7 +262,7 @@ public class PolarLoader implements ChunkLoader {
                 //noinspection deprecation
                 blockPalette[i] = ArgumentBlockState.staticParse(rawBlockPalette[i]);
             } catch (ArgumentSyntaxException e) {
-                logger.error("Failed to parse block state: {} ({})", rawBlockPalette[i], e.getMessage());
+                log.error("Failed to parse block state: {} ({})", rawBlockPalette[i], e.getMessage());
                 blockPalette[i] = Block.AIR;
             }
         }
@@ -247,7 +287,7 @@ public class PolarLoader implements ChunkLoader {
             biomePalette[i] = biomeReadCache.computeIfAbsent(rawBiomePalette[i], name -> {
                 var biomeId = this.worldAccess.getBiomeId(name);
                 if (biomeId == -1) {
-                    logger.error("Failed to find biome: {}", name);
+                    log.error("Failed to find biome: {}", name);
                     biomeId = plainsBiomeId;
                 }
                 return biomeId;
@@ -257,19 +297,19 @@ public class PolarLoader implements ChunkLoader {
             section.biomePalette().fill(biomePalette[0]);
         } else {
             final var paletteData = sectionData.biomeData();
-            for (int y = 0; y < CHUNK_SECTION_SIZE/4; y++) {
-                for (int z = 0; z < CHUNK_SECTION_SIZE/4; z++) {
-                    for (int x = 0; x < CHUNK_SECTION_SIZE/4; x++) {
+            for (int y = 0; y < CHUNK_SECTION_SIZE / 4; y++) {
+                for (int z = 0; z < CHUNK_SECTION_SIZE / 4; z++) {
+                    for (int x = 0; x < CHUNK_SECTION_SIZE / 4; x++) {
                         int index = x + (z) * 4 + (y) * 16;
 
                         var paletteIndex = paletteData[index];
                         if (paletteIndex >= biomePalette.length) {
-                            logger.error("Invalid biome palette index. This is probably a corrupted world, " +
+                            log.error("Invalid biome palette index. This is probably a corrupted world, " +
                                     "but it has been loaded with plains instead. No data has been written.");
                             section.biomePalette().set(x, y, z, plainsBiomeId);
+                        } else {
+                            section.biomePalette().set(x, y, z, biomePalette[paletteIndex]);
                         }
-
-                        section.biomePalette().set(x, y, z, biomePalette[paletteIndex]);
                     }
                 }
             }
@@ -282,35 +322,7 @@ public class PolarLoader implements ChunkLoader {
             UnsafeOps.unsafeUpdateSkyLightArray(section.skyLight(), getLightArray(sectionData.skyLightContent(), sectionData.skyLight()));
     }
 
-    @ApiStatus.Internal
-    public static byte[] getLightArray(@NotNull LightContent content, byte @Nullable [] data) {
-        return switch (content) {
-            case MISSING -> null;
-            case EMPTY -> LightCompute.EMPTY_CONTENT;
-            case FULL -> LightCompute.CONTENT_FULLY_LIT;
-            case PRESENT -> data;
-        };
-    }
-
-    @ApiStatus.Internal
-    public static @NotNull Block createBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
-        // Fetch the block type, we can ignore Handler/NBT since we are about to replace it
-        var block = chunk.getBlock(blockEntity.x(), blockEntity.y(), blockEntity.z(), Block.Getter.Condition.TYPE);
-        if (blockEntity.id() != null)
-            block = block.withHandler(BLOCK_MANAGER.getHandlerOrDummy(blockEntity.id()));
-        if (blockEntity.data() != null)
-            block = block.withNbt(blockEntity.data());
-        return block;
-    }
-
-    @ApiStatus.Internal
-    public static void loadBlockEntity(@NotNull Chunk chunk, @NotNull PolarChunk.BlockEntity blockEntity) {
-        var block = createBlockEntity(chunk, blockEntity);
-        chunk.setBlock(blockEntity.x(), blockEntity.y(), blockEntity.z(), block);
-    }
-
     // Unloading/saving
-
 
     @Override
     public boolean supportsParallelSaving() {
@@ -373,7 +385,8 @@ public class PolarLoader implements ChunkLoader {
 
         var userData = new byte[0];
 
-        synchronized (chunk) {
+        chunk.lockReadLock();
+        try {
             for (int i = 0; i < sections.length; i++) {
                 int sectionY = i + chunk.getMinSection();
                 var section = chunk.getSection(sectionY);
@@ -450,6 +463,8 @@ public class PolarLoader implements ChunkLoader {
             worldAccess.saveHeightmaps(chunk, heightmaps);
 
             userData = NetworkBuffer.makeArray(b -> worldAccess.saveChunkData(chunk, b));
+        } finally {
+            chunk.unlockReadLock();
         }
 
         worldDataLock.writeLock().lock();
@@ -495,5 +510,42 @@ public class PolarLoader implements ChunkLoader {
         builder.append(']');
 
         return builder.toString();
+    }
+
+    public static final class Builder {
+        @Nullable Path savePath;
+        @NotNull PolarWorld worldData;
+        @NotNull PolarWorldAccess worldAccess = PolarWorldAccess.DEFAULT;
+        boolean parallel = false;
+        boolean loadLighting = true;
+
+        public @NotNull Builder savePath(@Nullable Path savePath) {
+            this.savePath = savePath;
+            return this;
+        }
+
+        public @NotNull Builder worldData(@NotNull PolarWorld worldData) {
+            this.worldData = worldData;
+            return this;
+        }
+
+        public @NotNull Builder worldAccess(@NotNull PolarWorldAccess worldAccess) {
+            this.worldAccess = worldAccess;
+            return this;
+        }
+
+        public @NotNull Builder parallel(boolean parallel) {
+            this.parallel = parallel;
+            return this;
+        }
+
+        public @NotNull Builder loadLighting(boolean loadLighting) {
+            this.loadLighting = loadLighting;
+            return this;
+        }
+
+        public @NotNull PolarLoader build() {
+            return new PolarLoader(savePath, worldData, worldAccess, parallel, loadLighting);
+        }
     }
 }

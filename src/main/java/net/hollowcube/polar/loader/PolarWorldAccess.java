@@ -5,7 +5,6 @@ import net.minestom.server.instance.Chunk;
 import net.minestom.server.instance.Instance;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.registry.RegistryKey;
-import net.minestom.server.world.biome.Biome;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,8 +17,7 @@ import org.jetbrains.annotations.Nullable;
  * overhead to the format if unused.
  */
 public interface PolarWorldAccess {
-    PolarWorldAccess DEFAULT = new PolarWorldAccess() {
-    };
+    PolarWorldAccess DEFAULT = new DefaultPolarWorldAccess();
 
     /**
      * Called when an instance is created from this chunk loader.
@@ -89,13 +87,7 @@ public interface PolarWorldAccess {
     }
 
     default @NotNull String getBiomeName(int id) {
-        var biomeRegistry = MinecraftServer.getBiomeRegistry();
-        var biome = biomeRegistry.getKey(id);
-        if (biome == null) {
-            PolarLoader.logger.error("Failed to find biome: {}", id);
-            return Biome.PLAINS.name();
-        }
-        return biome.name();
+        return PolarWorldAccess.DEFAULT.getBiomeName(id);
     }
 
 }
